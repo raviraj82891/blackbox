@@ -6,6 +6,7 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 
 data class TimelineEntry(
     val timestampMs: Long,
@@ -18,6 +19,18 @@ data class TimelineEntry(
     val entryHash: String
 )
 
+data class TimelineSession(
+    val id: String,
+    val activityState: String,
+    val startTimeMs: Long,
+    val endTimeMs: Long,
+    val formattedTimeRange: String,
+    val durationMinutes: Int,
+    val maxSpeedKmh: Double,
+    val worstSeverity: SeverityLevel,
+    val entries: List<TimelineEntry>
+)
+
 enum class SeverityLevel {
     INFO,
     WARNING,
@@ -27,17 +40,16 @@ enum class SeverityLevel {
 /**
  * Fusion Engine — Rule-based state machine turning raw heterogeneous readings into
  * a human-readable, chronological incident timeline.
- * Example timeline sequence:
- * "Normal Walking" -> "In Vehicle (45 km/h)" -> "Sudden Deceleration (2.8G)" -> "Impact Detected (32 m/s²)" -> "Post-Event Stillness (No Movement)"
  */
 object FusionEngine {
 
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
     fun reconstructTimeline(rawEvents: List<SensorEvent>): List<TimelineEntry> {
+        val sortedEvents = rawEvents.sortedBy { it.timestampMs }
         val entries = mutableListOf<TimelineEntry>()
 
-        for (event in rawEvents.sortedBy { it.timestampMs }) {
+        for (event in sortedEvents) {
             val dateStr = timeFormat.format(Date(event.timestampMs))
             val json = runCatching { JSONObject(event.payloadJson) }.getOrNull()
 
@@ -51,7 +63,7 @@ object FusionEngine {
                                 formattedTime = dateStr,
                                 eventType = event.type,
                                 summaryTitle = "Severe Acceleration Spike / Impact",
-                                detailedDescription = "High peak force detected: %.2f m/s² (3-axis vector magnitude)".format(mag),
+                                detailedDescription = "High peak force detected: %.2f m/s²".format(mag),
                                 severityLevel = SeverityLevel.CRITICAL,
                                 rawPayload = event.payloadJson,
                                 entryHash = event.entryHash
@@ -125,15 +137,40 @@ object FusionEngine {
                 EventType.AUDIO_EVENT -> {
                     val label = json?.optString("eventLabel", "AMBIENT") ?: "AMBIENT"
                     val db = json?.optDouble("decibels", 0.0) ?: 0.0
-                    if (label == "LOUD_IMPACT") {
+
+                    // CO-OCCURRENCE VERIFICATION:
+                    // Only elevate to LOUD_IMPACT if co-occurs with accelerometer/gyro motion spike within 2000ms
+                    val hasCoOccurringMotionSpike = sortedEvents.any { motion ->
+                        (motion.type == EventType.ACCEL || motion.type == EventType.GYRO) &&
+                                abs(motion.timestampMs - event.timestampMs) <= 2000L &&
+                                runCatching {
+                                    val mJson = JSONObject(motion.payloadJson)
+                                    mJson.optDouble("magnitude", 0.0) > 20.0 || mJson.optDouble("deltaMagnitude", 0.0) > 2.0
+                                }.getOrDefault(false)
+                    }
+
+                    if (label == "LOUD_ACOUSTIC_NOISE" && hasCoOccurringMotionSpike) {
                         entries.add(
                             TimelineEntry(
                                 timestampMs = event.timestampMs,
                                 formattedTime = dateStr,
                                 eventType = event.type,
-                                summaryTitle = "Audio Event: Loud Acoustic Impact",
-                                detailedDescription = "Peak acoustic amplitude: %.1f dB (Classified event, no raw audio stored)".format(db),
+                                summaryTitle = "Audio & Physical Impact Co-occurrence",
+                                detailedDescription = "Acoustic impact (%.1f dB) co-occurred with kinetic motion spike".format(db),
                                 severityLevel = SeverityLevel.CRITICAL,
+                                rawPayload = event.payloadJson,
+                                entryHash = event.entryHash
+                            )
+                        )
+                    } else if (label == "LOUD_ACOUSTIC_NOISE") {
+                        entries.add(
+                            TimelineEntry(
+                                timestampMs = event.timestampMs,
+                                formattedTime = dateStr,
+                                eventType = event.type,
+                                summaryTitle = "Audio Event: Loud Acoustic Spike",
+                                detailedDescription = "High volume detected (%.1f dB) without co-occurring kinetic impact".format(db),
+                                severityLevel = SeverityLevel.WARNING,
                                 rawPayload = event.payloadJson,
                                 entryHash = event.entryHash
                             )
@@ -144,29 +181,14 @@ object FusionEngine {
                                 timestampMs = event.timestampMs,
                                 formattedTime = dateStr,
                                 eventType = event.type,
-                                summaryTitle = "Audio Event: High Ambient Noise / Raised Voice",
-                                detailedDescription = "Acoustic level: %.1f dB".format(db),
-                                severityLevel = SeverityLevel.WARNING,
+                                summaryTitle = "Audio Event: High Ambient Noise / Voice",
+                                detailedDescription = "Acoustic amplitude: %.1f dB".format(db),
+                                severityLevel = SeverityLevel.INFO,
                                 rawPayload = event.payloadJson,
                                 entryHash = event.entryHash
                             )
                         )
                     }
-                }
-                EventType.SYSTEM_EVENT -> {
-                    val sysMsg = json?.optString("message", "System Status Change") ?: "System Event"
-                    entries.add(
-                        TimelineEntry(
-                            timestampMs = event.timestampMs,
-                            formattedTime = dateStr,
-                            eventType = event.type,
-                            summaryTitle = sysMsg,
-                            detailedDescription = "Blackbox internal system log entry",
-                            severityLevel = SeverityLevel.INFO,
-                            rawPayload = event.payloadJson,
-                            entryHash = event.entryHash
-                        )
-                    )
                 }
                 else -> {
                     entries.add(
@@ -174,7 +196,7 @@ object FusionEngine {
                             timestampMs = event.timestampMs,
                             formattedTime = dateStr,
                             eventType = event.type,
-                            summaryTitle = "${event.type.name} Event",
+                            summaryTitle = "${event.type.name} Snapshot",
                             detailedDescription = event.payloadJson,
                             severityLevel = SeverityLevel.INFO,
                             rawPayload = event.payloadJson,
@@ -185,5 +207,89 @@ object FusionEngine {
             }
         }
         return entries
+    }
+
+    /**
+     * Groups raw timeline entries into sessions bounded by Activity Recognition transitions.
+     */
+    fun groupTimelineIntoSessions(entries: List<TimelineEntry>): List<TimelineSession> {
+        if (entries.isEmpty()) return emptyList()
+
+        val sorted = entries.sortedBy { it.timestampMs }
+        val sessions = mutableListOf<TimelineSession>()
+
+        var currentActivity = "General Activity"
+        var sessionStartTime = sorted.first().timestampMs
+        var currentSessionEntries = mutableListOf<TimelineEntry>()
+
+        for (entry in sorted) {
+            if (entry.eventType == EventType.ACTIVITY && entry.summaryTitle.startsWith("Activity Transition")) {
+                if (currentSessionEntries.isNotEmpty()) {
+                    val sessionEndTime = entry.timestampMs
+                    sessions.add(
+                        createSessionObject(
+                            activityState = currentActivity,
+                            startTimeMs = sessionStartTime,
+                            endTimeMs = sessionEndTime,
+                            entries = currentSessionEntries.toList()
+                        )
+                    )
+                }
+                currentActivity = entry.summaryTitle.substringAfter(": ").trim()
+                sessionStartTime = entry.timestampMs
+                currentSessionEntries = mutableListOf()
+            }
+            currentSessionEntries.add(entry)
+        }
+
+        if (currentSessionEntries.isNotEmpty()) {
+            val sessionEndTime = sorted.last().timestampMs
+            sessions.add(
+                createSessionObject(
+                    activityState = currentActivity,
+                    startTimeMs = sessionStartTime,
+                    endTimeMs = sessionEndTime,
+                    entries = currentSessionEntries.toList()
+                )
+            )
+        }
+
+        return sessions.reversed()
+    }
+
+    private fun createSessionObject(
+        activityState: String,
+        startTimeMs: Long,
+        endTimeMs: Long,
+        entries: List<TimelineEntry>
+    ): TimelineSession {
+        val startStr = timeFormat.format(Date(startTimeMs))
+        val endStr = timeFormat.format(Date(endTimeMs))
+        val durationMins = (((endTimeMs - startTimeMs) / 1000) / 60).toInt().coerceAtLeast(1)
+
+        val worstSeverity = when {
+            entries.any { it.severityLevel == SeverityLevel.CRITICAL } -> SeverityLevel.CRITICAL
+            entries.any { it.severityLevel == SeverityLevel.WARNING } -> SeverityLevel.WARNING
+            else -> SeverityLevel.INFO
+        }
+
+        val maxSpeed = entries
+            .filter { it.eventType == EventType.LOCATION }
+            .mapNotNull {
+                runCatching { JSONObject(it.rawPayload).optDouble("speed", 0.0) * 3.6 }.getOrNull()
+            }
+            .maxOrNull() ?: 0.0
+
+        return TimelineSession(
+            id = "$startTimeMs-$endTimeMs",
+            activityState = activityState,
+            startTimeMs = startTimeMs,
+            endTimeMs = endTimeMs,
+            formattedTimeRange = "$startStr – $endStr",
+            durationMinutes = durationMins,
+            maxSpeedKmh = maxSpeed,
+            worstSeverity = worstSeverity,
+            entries = entries
+        )
     }
 }

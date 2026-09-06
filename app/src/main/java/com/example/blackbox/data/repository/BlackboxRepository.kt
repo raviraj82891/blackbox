@@ -4,6 +4,8 @@ import com.example.blackbox.data.api.AWSBackendApi
 import com.example.blackbox.data.api.IncidentUploadRequest
 import com.example.blackbox.data.crypto.HashChainManager
 import com.example.blackbox.data.crypto.KeyManagementService
+import com.example.blackbox.data.db.EmergencyContact
+import com.example.blackbox.data.db.EmergencyContactDao
 import com.example.blackbox.data.db.EventType
 import com.example.blackbox.data.db.IncidentReport
 import com.example.blackbox.data.db.IncidentReportDao
@@ -19,6 +21,7 @@ import java.util.UUID
 class BlackboxRepository(
     private val sensorEventDao: SensorEventDao,
     private val incidentReportDao: IncidentReportDao,
+    private val emergencyContactDao: EmergencyContactDao,
     private val keyManagementService: KeyManagementService,
     private val apiService: AWSBackendApi
 ) {
@@ -65,6 +68,21 @@ class BlackboxRepository(
     suspend fun wipeAllData() = withContext(Dispatchers.IO) {
         sensorEventDao.deleteAll()
         incidentReportDao.deleteAll()
+    }
+
+    /**
+     * Emergency Contact Persistence methods.
+     */
+    fun getAllEmergencyContacts(): Flow<List<EmergencyContact>> = emergencyContactDao.getAllContacts()
+
+    fun getEmergencyContactCount(): Flow<Int> = emergencyContactDao.getContactCount()
+
+    suspend fun insertEmergencyContact(contact: EmergencyContact) = withContext(Dispatchers.IO) {
+        emergencyContactDao.insertContact(contact)
+    }
+
+    suspend fun deleteEmergencyContact(id: String) = withContext(Dispatchers.IO) {
+        emergencyContactDao.deleteContactById(id)
     }
 
     /**

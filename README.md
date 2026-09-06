@@ -1,7 +1,7 @@
 # Human Digital Black Box — Privacy-Preserving Incident Reconstruction
 
 > **BTech Computer Science Final Year Project**  
-> *Production-Quality Android Architecture & AWS Serverless Security Infrastructure*
+> *Production-Quality Android Architecture, Hilt DI, & AWS Serverless Security Infrastructure*
 
 ---
 
@@ -10,114 +10,61 @@ An Android application that maintains a rolling, encrypted, on-device buffer of 
 
 ---
 
-## 2. Research Framing (Viva Core Thesis)
+## 2. Research Framing & Architectural Enhancements
 
-### Research Question
-*Can heterogeneous smartphone sensor data be fused, entirely on-device and in real time, into a privacy-preserving, tamper-evident chronological reconstruction of a person's activity immediately preceding an emergency — without continuously transmitting raw personal data off the device?*
-
-### Computer Science Concepts Demonstrated
-1. **Sensor Fusion & On-Device Signal Processing**: Real-time multi-sensor ingestion combining accelerometer vector magnitude, gyroscopic angular delta, adaptive GPS updates, activity recognition transitions, and frame-by-frame acoustic amplitude analysis.
-2. **Applied Cryptography**:
-   - **SHA-256 Hash Chaining**: Every rolling buffer entry incorporates the previous entry's hash (`entryHash = SHA-256(prevHash | payloadJson | timestamp)`).
-   - **Merkle-Style Root Hash**: Generates a tamper-evident root hash over frozen incident windows to prove timeline authenticity post-hoc.
-   - **Zero-Knowledge Architecture & Envelope Encryption**: Client-side AES-256-GCM encryption before AWS S3 upload; decryption keys are shared out-of-band so the cloud backend never holds plaintext data or decryption keys.
-3. **Mobile Systems Engineering**:
-   - **SQLCipher Encrypted Database**: Hardware-backed MasterKey generation via Android Keystore (`security-crypto`).
-   - **WorkManager Retention Pruning**: Automated background workers continuously purging entries older than 60 minutes.
-   - **Foreground Service**: Android 14+ compliant continuous collection with location, microphone, and special-use types.
+### Key Computer Science Concepts & Refinements
+1. **Hilt Dependency Injection**: Clean separation of concerns with modular Hilt bindings (`DatabaseModule`, `AppModule`) and focused `@HiltViewModel`s (`HomeViewModel`, `TimelineViewModel`, `IncidentsViewModel`, `ContactsViewModel`, `SettingsViewModel`).
+2. **Room Persisted Emergency Contacts & Schema Migration (v1 -> v2)**: Emergency contacts are stored in SQLCipher Room database with a formal Room `Migration(1, 2)`. Requires at least 1 saved contact for "FULL PROTECTION" status.
+3. **Honest Co-Occurrence Audio Classification**: Acoustic amplitude (>85 dB) is logged as `LOUD_ACOUSTIC_NOISE` unless co-occurring within ±2000 ms with an accelerometer/gyro kinetic spike, in which case it elevates to `LOUD_IMPACT`.
+4. **Immediate 3-Second Path for Manual SOS**: Deliberate manual SOS triggers bypass the 30-second false-positive filter and run a quick 3-second undo window for immediate activation.
+5. **WorkManager Periodic Hash-Chain Verification**: Moved off ViewModel lifecycle into `HashChainVerificationWorker`.
+6. **Real-time Accelerometer Sparkline Chart**: Live Compose `Canvas` sparkline displaying 60 points of motion magnitude.
+7. **Session-Based Timeline Grouping**: Timeline entries are grouped into collapsible sessions bounded by Activity Recognition transitions (*Walking*, *In Vehicle*, *Stationary*) displaying start/end times, max speed, and peak severity level.
+8. **Personal Calibration & Adaptive Sensitivity**: 10-second personal baseline motion calibration + automatic adaptive sensitivity prompt when countdowns are cancelled repeatedly.
+9. **Glance Home-Screen Widget**: Android Jetpack Glance widget providing live status and direct one-tap emergency SOS activation.
+10. **Battery-Aware Power Saver Mode**: Automatically pauses audio classification and relaxes location updates when battery drops below 15% to preserve emergency power.
 
 ---
 
-## 3. Non-Negotiable Privacy Design Principles
+## 3. Technology Stack
 
-1. **60-Minute Rolling Buffer (No Permanent Logs)**: Sensor events older than 60 minutes are continuously purged by WorkManager unless an incident trigger freezes the buffer.
-2. **On-Device Processing First**: All fusion rules and crash detection algorithms execute locally in RAM/Room.
-3. **Zero-Knowledge Backend**: Incident bundles are encrypted client-side using AES-256-GCM before uploading to AWS API Gateway/S3.
-4. **No Raw Audio Storage Ever**: Microphone samples feed a real-time on-device acoustic classifier only (e.g. `LOUD_IMPACT`, `RAISED_VOICE`, ambient dB). Raw PCM buffers are zeroed out and discarded frame-by-frame within RAM.
-5. **Consensual & Visible Operation**: Persistent Android notification with one-tap pause and one-tap complete data wipe.
-6. **Tamper-Evidence**: Cryptographic hash-chaining guarantees post-hoc insertion/modification detection.
-
----
-
-## 4. Pipeline & Architecture
-
-```
-[ Accelerometer + Gyro + Adaptive Location + Activity Recognition + Audio Classifier + Wifi ]
-                                          |
-                                          v (Structured Kotlin Flows)
-                               Ingestion & Hash-Chaining
-                                          |
-                                          v
-                      Room + SQLCipher Encrypted 60m Rolling Buffer
-                                          |
-                                          +-----------------------+
-                                          |                       |
-                                          v                       v
-                               WorkManager 60m Pruner      Fusion Engine & Trigger
-                                                                  |
-                                                                  v (Impact / SOS)
-                                                       30s Confirmation Countdown
-                                                                  |
-                                                                  v (On Expiry)
-                                                       Freeze Buffer & Reconstruct
-                                                                  |
-                                                                  v
-                                                       Client-Side AES-256-GCM
-                                                                  |
-                                                                  v
-                                                       AWS Backend & Emergency Alerts
-```
+- **Architecture**: MVVM + Hilt DI + Jetpack Compose (Material 3)
+- **Database**: Room (Migration 1->2) + SQLCipher + Android Keystore MasterKey
+- **Sensors & Collectors**: `SensorManager`, `FusedLocationProviderClient`, `ActivityRecognitionClient`, `AudioRecord` (no raw audio stored)
+- **Widgets & Backgrounding**: Jetpack Glance Home Widget, WorkManager (`HiltWorker`), Android 14+ Foreground Service
+- **Networking**: Retrofit + OkHttp Certificate Pinning
+- **Cloud Backend Architecture (AWS Serverless Intent)**: API Gateway -> Lambda -> S3 (SSE-KMS) -> DynamoDB -> SNS/SES
 
 ---
 
-## 5. Technology Stack
+## 4. How to Demo for Viva Evaluation
 
-- **Language & Framework**: Kotlin, Jetpack Compose (Material 3), Coroutines, StateFlow
-- **Architecture**: MVVM with Unidirectional Data Flow
-- **Encrypted Local Storage**: Room + SQLCipher + Android Keystore (`androidx.security:security-crypto`)
-- **Background Operations**: WorkManager, Android 14+ Foreground Service
-- **Sensors & Context**: `SensorManager`, `FusedLocationProviderClient`, `ActivityRecognitionClient`, `AudioRecord` acoustic classifier
-- **Networking & Security**: Retrofit + OkHttp with Certificate Pinning
-- **Cloud Backend Architecture (AWS Serverless)**:
-  - API Gateway (REST API endpoint)
-  - AWS Lambda (Node.js/Python business logic)
-  - DynamoDB (Metadata & hash-chain manifests)
-  - S3 + SSE-KMS (Encrypted incident bundle storage)
-  - Cognito (User Auth)
-  - SNS / SES (SMS & Email alerts to emergency contacts)
+### Step 1: Onboarding & Room Emergency Contacts
+1. Launch the app and complete onboarding.
+2. Go to the **Contacts** tab and add an emergency contact (*persisted in Room DB v2*).
+3. Tap **Send Test Alert Preview** to fire a local notification previewing the alert that contact would receive.
+4. Verify the **Status** screen now displays **FULL BLACK BOX PROTECTION ACTIVE**.
 
----
+### Step 2: Live Motion Sparkline & Situational Status
+1. Observe the live Compose `Canvas` **Sparkline Chart** moving with phone motion.
+2. Note the dynamic **Situational Status** string (e.g. *"In Vehicle — Actively Monitoring High-Speed Motion"*).
 
-## 6. How to Demo for Viva Evaluation
+### Step 3: Session-Based Timeline
+1. Switch to the **Timeline** tab.
+2. Examine the **Collapsible Sessions** grouped by Activity Recognition transitions (*Walking Session*, *In Vehicle Session*).
+3. Expand a session to view individual event entries, max speed, and SHA-256 entry hashes.
 
-### Step 1: Onboarding & Privacy Rationale
-- Launch the app. Review the onboarding screen highlighting the 60-minute retention policy, zero-knowledge encryption, and no-raw-audio policy. Click **Enable Black Box Protection**.
+### Step 4: Personal Motion Calibration & Adaptive Thresholds
+1. Navigate to **Settings** and tap **Start 10s Personal Calibration**.
+2. Carry the phone normally for 10 seconds to let the system measure your baseline motion and derive a personalized impact threshold.
+3. On frequent false-positive cancellations, note the adaptive prompt offering to raise the sensitivity threshold.
 
-### Step 2: Live Sensor Buffer & Hash Chain Verification
-- Navigate to the **Status** tab to observe live "Buffered Events" counter.
-- Switch to the **Timeline** tab to inspect real-time reconstructed event entries (location updates, activity state, acoustic classification).
-- Note the green banner at top: `CRYPTO HASH CHAIN: INTACT & TAMPER-EVIDENT` (verifies SHA-256 prevHash links).
+### Step 5: Immediate Manual SOS & Home Widget
+1. Tap **MANUAL EMERGENCY SOS** on the Home screen or use the **Glance Home-Screen Widget**.
+2. Verify it triggers the fast 3-second emergency countdown for immediate activation.
 
-### Step 3: Viva "Simulate Incident" Mode
-- Navigate to the **Debug** tab.
-- Tap **Inject Simulated Crash Sequence**.
-- Watch as synthetic pre-impact telemetry is injected:
-  1. *Vehicle Cruising at 65 km/h*
-  2. *Sudden Harsh Deceleration & Angular Shift*
-  3. *Peak Impact Deceleration (34.7 m/s²)*
-  4. *Acoustic Impact Audio Event (88.5 dB)*
-  5. *Post-Impact Stillness*
-- The app immediately triggers the full-screen **30-Second Emergency Confirmation Countdown**.
-
-### Step 4: Freeze Buffer, Timeline Reconstruction & PDF Export
-- Let the countdown expire (or trigger manual SOS).
-- Navigate to the **Incidents** tab to inspect the frozen incident report.
-- Examine the generated **Merkle Root Hash** proof.
-- Tap **Export PDF** to view or share the officially generated printable PDF Incident Report.
-
-### Step 5: Quick Settings SOS Tile
-- Pull down the Android system notification shade.
-- Add and tap the **Blackbox SOS** Quick Settings Tile to test immediate system-wide SOS activation.
-
-### Step 6: One-Tap Data Wipe
-- Return to **Status** or **Settings** and tap **One-Tap Wipe** to demonstrate complete instant data purging.
+### Step 6: Viva "Simulate Incident" Mode & PDF Export
+1. Go to **Debug** tab and tap **Inject Simulated Crash Sequence**.
+2. Let the emergency countdown expire.
+3. Open the **Incidents** tab to inspect the frozen report and its Merkle Root Hash.
+4. Tap **Export PDF** to view or share the generated printable PDF report.

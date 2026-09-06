@@ -15,7 +15,7 @@ import kotlin.math.log10
 import kotlin.math.sqrt
 
 data class AudioClassifiedEvent(
-    val eventLabel: String,      // e.g. "LOUD_IMPACT", "RAISED_VOICE", "AMBIENT_NORMAL"
+    val eventLabel: String,      // e.g. "LOUD_ACOUSTIC_NOISE", "RAISED_VOICE", "AMBIENT_NORMAL"
     val decibels: Double,
     val confidence: Float,
     val timestampMs: Long
@@ -65,10 +65,10 @@ class AudioClassifierCollector(private val context: Context) {
                     val rms = sqrt(sum / readSize)
                     val db = if (rms > 0) 20 * log10(rms) else 0.0
 
-                    // Classify sound based on frame acoustic parameters
+                    // Classify sound honestly based on acoustic volume alone
                     val (label, confidence) = when {
-                        db > 85.0 -> "LOUD_IMPACT" to 0.92f
-                        db > 70.0 -> "RAISED_VOICE" to 0.85f
+                        db > 85.0 -> "LOUD_ACOUSTIC_NOISE" to 0.88f
+                        db > 70.0 -> "RAISED_VOICE" to 0.82f
                         else -> "AMBIENT_NORMAL" to 0.99f
                     }
 

@@ -30,6 +30,10 @@ class TriggerDetector {
     private var possibleImpactTimeMs: Long = 0L
     private var lastPeakMagnitude: Double = 0.0
 
+    // Adaptive sensitivity calibration counter
+    private var cancelledCountdownsInWindow = 0
+    private var lastCancelledPeakMagnitude = 0.0
+
     fun evaluateMotion(accelMagnitude: Float, gyroDelta: Float, timestampMs: Long): Boolean {
         if (_countdownState.value is CountdownState.ActiveCountdown || _countdownState.value is CountdownState.Activated) {
             return false
@@ -38,16 +42,17 @@ class TriggerDetector {
         if (accelMagnitude > impactThresholdMs2 && gyroDelta > gyroThresholdRad) {
             possibleImpactTimeMs = timestampMs
             lastPeakMagnitude = accelMagnitude.toDouble()
-            // Initiate 30-second countdown for user confirmation before trigger activation
-            startCountdown(TriggerType.AUTO_CRASH, lastPeakMagnitude)
+            // 30-second confirmation for automatic crash/fall detection
+            startCountdown(TriggerType.AUTO_CRASH, lastPeakMagnitude, durationSeconds = 30)
             return true
         }
         return false
     }
 
-    fun startCountdown(triggerType: TriggerType, magnitude: Double = 0.0) {
+    fun startCountdown(triggerType: TriggerType, magnitude: Double = 0.0, durationSeconds: Int = 30) {
+        val duration = if (triggerType == TriggerType.MANUAL_SOS) 3 else durationSeconds
         _countdownState.value = CountdownState.ActiveCountdown(
-            secondsRemaining = 30,
+            secondsRemaining = duration,
             triggerType = triggerType,
             impactMagnitude = magnitude
         )
@@ -65,8 +70,21 @@ class TriggerDetector {
     }
 
     fun cancelCountdown() {
+        val current = _countdownState.value
+        if (current is CountdownState.ActiveCountdown && current.triggerType != TriggerType.MANUAL_SOS) {
+            cancelledCountdownsInWindow++
+            lastCancelledPeakMagnitude = current.impactMagnitude
+        }
         _countdownState.value = CountdownState.Cancelled
         _countdownState.value = CountdownState.Idle
+    }
+
+    fun shouldSuggestThresholdAdjustment(): Boolean = cancelledCountdownsInWindow >= 3
+
+    fun getSuggestedNewThreshold(): Double = (lastCancelledPeakMagnitude + 2.0).coerceAtLeast(32.0)
+
+    fun resetAdaptiveThresholdCounter() {
+        cancelledCountdownsInWindow = 0
     }
 
     fun resetState() {

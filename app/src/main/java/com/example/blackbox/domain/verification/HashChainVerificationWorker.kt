@@ -1,4 +1,4 @@
-package com.example.blackbox.domain.pruning
+package com.example.blackbox.domain.verification
 
 import android.content.Context
 import androidx.hilt.work.HiltWorker
@@ -9,11 +9,11 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 
 /**
- * Background WorkManager task enforcing the rolling buffer retention window (default 60 min).
- * Automatically purges expired sensor entries to satisfy the privacy guarantee.
+ * Background WorkManager task that periodically verifies hash-chain integrity
+ * independently of UI or ViewModel lifecycle.
  */
 @HiltWorker
-class BufferPruningWorker @AssistedInject constructor(
+class HashChainVerificationWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
     private val repository: BlackboxRepository
@@ -21,8 +21,8 @@ class BufferPruningWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         return try {
-            repository.purgeExpiredBuffer(retentionMinutes = 60)
-            Result.success()
+            val isIntact = repository.verifyBufferIntegrity(windowMinutes = 60)
+            if (isIntact) Result.success() else Result.failure()
         } catch (e: Exception) {
             Result.retry()
         }

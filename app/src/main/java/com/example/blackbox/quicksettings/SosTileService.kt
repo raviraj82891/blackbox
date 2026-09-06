@@ -4,13 +4,12 @@ import android.content.Intent
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import com.example.blackbox.service.BlackboxForegroundService
+import dagger.hilt.android.AndroidEntryPoint
 
 /**
  * Quick Settings Tile Service — Allows instant Manual SOS trigger from the Android System Quick Settings shade.
- * Satisfies the requirement:
- * "Manual SOS: dedicated in-app button + a Quick Settings tile, since Android does not
- * allow reliably intercepting hardware power-button chords without an accessibility service."
  */
+@AndroidEntryPoint
 class SosTileService : TileService() {
 
     override fun onClick() {

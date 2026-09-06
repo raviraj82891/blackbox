@@ -5,8 +5,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.dp
 fun SettingsScreen(
     impactThreshold: Double,
     gyroThreshold: Double,
+    isCalibrating: Boolean,
+    calibrationProgress: Float,
+    onStartCalibrationClicked: () -> Unit,
     onImpactThresholdChanged: (Double) -> Unit,
     onGyroThresholdChanged: (Double) -> Unit,
     onWipeDataClicked: () -> Unit
@@ -41,7 +44,55 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Feature 2.3: Personal Calibration Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Build, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Personal Motion Calibration",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Carry your phone normally for 10 seconds — we'll measure your baseline motion and derive a custom impact threshold.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (isCalibrating) {
+                        LinearProgressIndicator(
+                            progress = { calibrationProgress },
+                            modifier = Modifier.fillMaxWidth().height(8.dp)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Learning normal carrying baseline... ${(calibrationProgress * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        Button(
+                            onClick = onStartCalibrationClicked,
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Start 10s Personal Calibration")
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Impact Threshold Slider
             Card(

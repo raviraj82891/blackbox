@@ -1,6 +1,12 @@
 package com.example.blackbox.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -8,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Pause
@@ -18,7 +25,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -28,15 +38,34 @@ import com.example.blackbox.domain.trigger.CountdownState
 @Composable
 fun HomeScreen(
     isServiceRunning: Boolean,
+    isBatterySaverActive: Boolean,
     bufferEventCount: Int,
+    savedContactCount: Int,
     isChainValid: Boolean,
+    sparklinePoints: List<Float>,
+    situationalStatus: String,
     countdownState: CountdownState,
+    suggestAdaptiveThreshold: Boolean,
     onPauseResumeClicked: () -> Unit,
     onWipeDataClicked: () -> Unit,
     onManualSosClicked: () -> Unit,
-    onCancelCountdownClicked: () -> Unit
+    onCancelCountdownClicked: () -> Unit,
+    onApplyAdaptiveThreshold: () -> Unit,
+    onDismissAdaptivePrompt: () -> Unit
 ) {
     var showWipeConfirmation by remember { mutableStateOf(false) }
+
+    // Pulse animation for hash-chain status
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alpha"
+    )
 
     Scaffold { padding ->
         Box(
@@ -51,12 +80,100 @@ fun HomeScreen(
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Status Header Card
+
+                // Contact Requirement Warning Banner
+                if (savedContactCount == 0) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.errorContainer
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "PARTIAL PROTECTION: Add an Emergency Contact in the Contacts tab to enable incident alerts.",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
+
+                // Battery Saver Warning Banner (Feature 2.5)
+                if (isBatterySaverActive) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color(0xFF78350F)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.BatteryAlert, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "POWER SAVER ACTIVE (<15% Battery): Audio classification paused and location relaxed to preserve emergency power.",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+
+                // Adaptive Threshold Suggestion Card (Feature 2.3)
+                if (suggestAdaptiveThreshold) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Adaptive Sensitivity Prompt",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Frequent cancellations detected. Would you like to automatically raise the impact threshold to reduce false alerts during normal activity?",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row {
+                                Button(
+                                    onClick = onApplyAdaptiveThreshold,
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("Raise Threshold")
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                TextButton(onClick = onDismissAdaptivePrompt) {
+                                    Text("Dismiss")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Main Status Header Card
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (isServiceRunning) Color(0xFF0F172A) else Color(0xFF334155)
+                        containerColor = if (isServiceRunning && savedContactCount > 0) Color(0xFF0F172A) else Color(0xFF334155)
                     )
                 ) {
                     Column(
@@ -71,28 +188,54 @@ fun HomeScreen(
                             Box(
                                 modifier = Modifier
                                     .size(12.dp)
+                                    .alpha(if (isServiceRunning) pulseAlpha else 1f)
                                     .background(
-                                        color = if (isServiceRunning) Color(0xFF22C55E) else Color(0xFFEF4444),
+                                        color = if (isServiceRunning && savedContactCount > 0) Color(0xFF22C55E) else Color(0xFFF59E0B),
                                         shape = CircleShape
                                     )
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (isServiceRunning) "BLACK BOX ACTIVE" else "BUFFER PAUSED",
+                                text = if (isServiceRunning && savedContactCount > 0) "FULL BLACK BOX PROTECTION ACTIVE" else if (isServiceRunning) "PARTIAL PROTECTION ACTIVE" else "PAUSED",
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
+                                fontSize = 13.sp
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         Text(
-                            text = if (isServiceRunning) "60-Min Rolling Buffer Recording" else "Sensor Collection Paused",
-                            color = Color.White.copy(alpha = 0.8f),
-                            fontSize = 13.sp,
+                            text = situationalStatus,
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
                             textAlign = TextAlign.Center
                         )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Feature 2.1: Real-time Accelerometer Sparkline Chart
+                Text(
+                    text = "Live Motion Vector Sparkline (2m Window)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.Start)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(110.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
+                ) {
+                    Box(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+                        SparklineCanvas(points = sparklinePoints, modifier = Modifier.fillMaxSize())
                     }
                 }
 
@@ -112,20 +255,20 @@ fun HomeScreen(
                     MetricCard(
                         title = "Buffered Events",
                         value = "$bufferEventCount",
-                        subtitle = "Last 60 mins",
+                        subtitle = "60m Rolling Window",
                         modifier = Modifier.weight(1f)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     MetricCard(
                         title = "Chain Integrity",
-                        value = if (isChainValid) "VALID" else "TAMPERED",
-                        subtitle = if (isChainValid) "SHA-256 OK" else "Check Chain",
+                        value = if (isChainValid) "VERIFIED" else "TAMPERED",
+                        subtitle = if (isChainValid) "SHA-256 Intact" else "Discrepancy",
                         isSuccess = isChainValid,
                         modifier = Modifier.weight(1f)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
                 // Quick Action Controls
                 Row(modifier = Modifier.fillMaxWidth()) {
@@ -160,9 +303,9 @@ fun HomeScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(28.dp))
 
-                // Manual SOS Button
+                // Manual SOS Button (Quick 3s Activation)
                 Button(
                     onClick = onManualSosClicked,
                     modifier = Modifier
@@ -224,6 +367,40 @@ fun HomeScreen(
                     Text("Cancel")
                 }
             }
+        )
+    }
+}
+
+@Composable
+private fun SparklineCanvas(points: List<Float>, modifier: Modifier = Modifier) {
+    if (points.size < 2) return
+
+    val maxVal = (points.maxOrNull() ?: 15f).coerceAtLeast(20f)
+    val minVal = (points.minOrNull() ?: 5f).coerceAtMost(5f)
+
+    Canvas(modifier = modifier) {
+        val width = size.width
+        val height = size.height
+        val path = Path()
+
+        val stepX = width / (points.size - 1)
+
+        points.forEachIndexed { index, point ->
+            val x = index * stepX
+            val normalizedY = (point - minVal) / (maxVal - minVal)
+            val y = height - (normalizedY * height)
+
+            if (index == 0) {
+                path.moveTo(x, y)
+            } else {
+                path.lineTo(x, y)
+            }
+        }
+
+        drawPath(
+            path = path,
+            color = Color(0xFF0284C7),
+            style = Stroke(width = 3.dp.toPx())
         )
     }
 }

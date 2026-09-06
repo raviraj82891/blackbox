@@ -6,23 +6,21 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.example.blackbox.ui.MainViewModel
 import com.example.blackbox.ui.navigation.BlackboxNavHost
 import com.example.blackbox.ui.theme.BlackboxTheme
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
-    private val viewModel: MainViewModel by viewModels()
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
-        // Permissions granted
+        // Permissions callback
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,7 +33,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    BlackboxNavHost(viewModel = viewModel)
+                    BlackboxNavHost()
                 }
             }
         }

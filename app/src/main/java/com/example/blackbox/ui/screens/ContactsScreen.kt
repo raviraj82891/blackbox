@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,14 +15,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-
-import com.example.blackbox.data.api.EmergencyContactDto
+import androidx.compose.ui.unit.sp
+import com.example.blackbox.data.db.EmergencyContact
 
 @Composable
 fun ContactsScreen(
-    contacts: List<EmergencyContactDto>,
-    onAddContact: (EmergencyContactDto) -> Unit,
-    onRemoveContact: (String) -> Unit
+    contacts: List<EmergencyContact>,
+    onAddContact: (EmergencyContact) -> Unit,
+    onRemoveContact: (String) -> Unit,
+    onSendTestAlert: (EmergencyContact) -> Unit
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
 
@@ -42,7 +44,7 @@ fun ContactsScreen(
                 .padding(16.dp)
         ) {
             Text(
-                text = "Emergency Contacts",
+                text = "Emergency Contacts (Room Persisted)",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -56,7 +58,7 @@ fun ContactsScreen(
 
             if (contacts.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No emergency contacts registered. Click + to add.")
+                    Text("No emergency contacts saved in Room. Click + to add your first contact.")
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -66,24 +68,36 @@ fun ContactsScreen(
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(contact.name, fontWeight = FontWeight.Bold)
-                                        Text("${contact.phone} • ${contact.email}", style = MaterialTheme.typography.bodySmall)
-                                        Text("Relationship: ${contact.relationship}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column {
+                                            Text(contact.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                            Text("${contact.phone} • ${contact.email}", style = MaterialTheme.typography.bodySmall)
+                                            Text("Relationship: ${contact.relationship}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                        }
+                                    }
+                                    IconButton(onClick = { onRemoveContact(contact.id) }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Remove", tint = MaterialTheme.colorScheme.error)
                                     }
                                 }
-                                IconButton(onClick = { contact.id?.let { onRemoveContact(it) } }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Remove", tint = MaterialTheme.colorScheme.error)
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                OutlinedButton(
+                                    onClick = { onSendTestAlert(contact) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Send Test Alert Preview")
                                 }
                             }
                         }
@@ -115,8 +129,7 @@ fun ContactsScreen(
                     onClick = {
                         if (name.isNotBlank() && phone.isNotBlank()) {
                             onAddContact(
-                                EmergencyContactDto(
-                                    id = System.currentTimeMillis().toString(),
+                                EmergencyContact(
                                     name = name,
                                     phone = phone,
                                     email = email,
@@ -127,7 +140,7 @@ fun ContactsScreen(
                         }
                     }
                 ) {
-                    Text("Add Contact")
+                    Text("Save Contact")
                 }
             },
             dismissButton = {

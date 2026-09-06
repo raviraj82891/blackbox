@@ -13,9 +13,6 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.example.blackbox.MainActivity
 import com.example.blackbox.R
-import com.example.blackbox.data.api.RetrofitClient
-import com.example.blackbox.data.crypto.KeyManagementService
-import com.example.blackbox.data.db.BlackboxDatabase
 import com.example.blackbox.data.db.EventType
 import com.example.blackbox.data.db.TriggerType
 import com.example.blackbox.data.repository.BlackboxRepository
@@ -25,6 +22,7 @@ import com.example.blackbox.sensor.BatteryCollector
 import com.example.blackbox.sensor.LocationCollector
 import com.example.blackbox.sensor.SensorCollector
 import com.example.blackbox.sensor.WifiSnapshotCollector
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,15 +30,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class BlackboxForegroundService : Service() {
+
+    @Inject
+    lateinit var repository: BlackboxRepository
+
+    @Inject
+    lateinit var triggerDetector: TriggerDetector
 
     private val binder = LocalBinder()
     private val serviceJob = Job()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
-
-    private var repository: BlackboxRepository? = null
-    val triggerDetector = TriggerDetector()
 
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording.asStateFlow()
@@ -54,11 +57,6 @@ class BlackboxForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-
-        val kms = KeyManagementService(applicationContext)
-        val dbPassphrase = kms.getOrCreateDatabasePassphrase()
-        val db = BlackboxDatabase.getInstance(applicationContext, dbPassphrase)
-        repository = BlackboxRepository(db.sensorEventDao(), db.incidentReportDao(), kms, RetrofitClient.apiService)
 
         startForeground(NOTIFICATION_ID, buildNotification("Black Box Active — Continuous 60m Buffer"))
         startSensorCollection()
@@ -77,7 +75,6 @@ class BlackboxForegroundService : Service() {
     private fun startSensorCollection() {
         _isRecording.value = true
 
-        val repo = repository ?: return
         val sensorCollector = SensorCollector(applicationContext)
         val locationCollector = LocationCollector(applicationContext)
         val audioCollector = AudioClassifierCollector(applicationContext)
@@ -91,7 +88,7 @@ class BlackboxForegroundService : Service() {
                 val payload = """{"x":%.2f,"y":%.2f,"z":%.2f,"magnitude":%.2f}""".format(
                     reading.x, reading.y, reading.z, reading.magnitude
                 )
-                repo.recordSensorEvent(EventType.ACCEL, payload, reading.timestampMs)
+                repository.recordSensorEvent(EventType.ACCEL, payload, reading.timestampMs)
 
                 // Feed into trigger detector
                 triggerDetector.evaluateMotion(reading.magnitude, 0f, reading.timestampMs)
@@ -105,18 +102,21 @@ class BlackboxForegroundService : Service() {
                 val payload = """{"x":%.2f,"y":%.2f,"z":%.2f,"deltaMagnitude":%.2f}""".format(
                     reading.x, reading.y, reading.z, reading.deltaMagnitude
                 )
-                repo.recordSensorEvent(EventType.GYRO, payload, reading.timestampMs)
+                repository.recordSensorEvent(EventType.GYRO, payload, reading.timestampMs)
             }
         }
 
-        // 3. Audio Classifier Flow (NO RAW AUDIO PERSISTENCE)
+        // 3. Audio Classifier Flow (Feature 2.5: Battery Saver pauses audio classifier)
         serviceScope.launch {
             audioCollector.observeAudioEvents().collect { audioEvent ->
                 if (!_isRecording.value) return@collect
+                val bat = batteryCollector.getBatteryStatus()
+                if (bat.levelPercentage < 15 && !bat.isCharging) return@collect // Pause in Power Saver Mode
+
                 val payload = """{"eventLabel":"${audioEvent.eventLabel}","decibels":%.1f,"confidence":%.2f}""".format(
                     audioEvent.decibels, audioEvent.confidence
                 )
-                repo.recordSensorEvent(EventType.AUDIO_EVENT, payload, audioEvent.timestampMs)
+                repository.recordSensorEvent(EventType.AUDIO_EVENT, payload, audioEvent.timestampMs)
             }
         }
 
@@ -124,11 +124,11 @@ class BlackboxForegroundService : Service() {
         serviceScope.launch {
             val bat = batteryCollector.getBatteryStatus()
             val batPayload = """{"level":${bat.levelPercentage},"isCharging":${bat.isCharging}}"""
-            repo.recordSensorEvent(EventType.BATTERY, batPayload, bat.timestampMs)
+            repository.recordSensorEvent(EventType.BATTERY, batPayload, bat.timestampMs)
 
             val wifi = wifiCollector.captureSnapshot()
             val wifiPayload = """{"ssid":"${wifi.connectedSsid ?: ""}","signalDbm":${wifi.signalLevelDbm},"accessPoints":${wifi.nearbyAccessPointCount}}"""
-            repo.recordSensorEvent(EventType.WIFI, wifiPayload, wifi.timestampMs)
+            repository.recordSensorEvent(EventType.WIFI, wifiPayload, wifi.timestampMs)
         }
     }
 
@@ -143,7 +143,7 @@ class BlackboxForegroundService : Service() {
     }
 
     fun triggerManualSos() {
-        triggerDetector.startCountdown(TriggerType.MANUAL_SOS, 0.0)
+        triggerDetector.startCountdown(TriggerType.MANUAL_SOS, durationSeconds = 3)
     }
 
     private fun createNotificationChannel() {
