@@ -12,9 +12,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MyLocation
@@ -79,7 +79,7 @@ private fun VisionAndPrivacyStage(onNextClicked: () -> Unit) {
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Your Personal Safety Black Box",
+            text = "TRACE — Digital Black Box",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
@@ -88,7 +88,7 @@ private fun VisionAndPrivacyStage(onNextClicked: () -> Unit) {
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "If you're ever in a serious accident and can't explain what happened, Black Box already has the last 60 minutes recorded — automatically, safely, and only for you.",
+            text = "If you're ever in a serious accident and can't explain what happened, TRACE already has the last 60 minutes recorded — automatically, safely, and only for you.",
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -144,7 +144,7 @@ private fun VisionAndPrivacyStage(onNextClicked: () -> Unit) {
 private fun WalkthroughStage(onNextClicked: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            text = "How Black Box Protects You",
+            text = "How TRACE Protects You",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
@@ -155,7 +155,7 @@ private fun WalkthroughStage(onNextClicked: () -> Unit) {
         WalkthroughStepCard(
             stepNumber = "1",
             title = "Continuous Silent Protection",
-            description = "Your phone quietly monitors motion, location, and environmental status over a rolling 60-minute window."
+            description = "TRACE quietly monitors motion, location, and environmental status over a rolling 60-minute window."
         )
 
         Spacer(modifier = Modifier.height(14.dp))
@@ -163,7 +163,7 @@ private fun WalkthroughStage(onNextClicked: () -> Unit) {
         WalkthroughStepCard(
             stepNumber = "2",
             title = "Smart Incident Detection",
-            description = "If a crash or severe fall occurs, the app gives you 30 seconds to tap 'I'm OK' before help is called."
+            description = "If a crash or severe fall occurs, TRACE gives you 30 seconds to tap 'I'm OK' before help is called."
         )
 
         Spacer(modifier = Modifier.height(14.dp))
@@ -223,7 +223,7 @@ private fun StagedPermissionsStage(onComplete: () -> Unit) {
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "We explain every permission before asking so you know exactly why it's needed.",
+            text = "We explain every permission before asking so you know exactly why TRACE needs it.",
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -235,7 +235,7 @@ private fun StagedPermissionsStage(onComplete: () -> Unit) {
             0 -> PermissionExplanationCard(
                 icon = Icons.Default.MyLocation,
                 title = "Location Permission",
-                explanation = "This lets Black Box record where an incident happened so emergency responders or family know where you are.",
+                explanation = "This lets TRACE record where an incident happened so emergency responders or family know where you are.",
                 buttonText = "Grant Location Permission",
                 onRequest = {
                     multiplePermissionLauncher.launch(
@@ -256,9 +256,9 @@ private fun StagedPermissionsStage(onComplete: () -> Unit) {
                 }
             )
             2 -> PermissionExplanationCard(
-                icon = Icons.Default.DirectionsWalk,
+                icon = Icons.AutoMirrored.Filled.DirectionsWalk,
                 title = "Physical Activity Permission",
-                explanation = "This allows the app to know if you were walking, driving, or stationary prior to an emergency.",
+                explanation = "This allows TRACE to know if you were walking, driving, or stationary prior to an emergency.",
                 buttonText = "Grant Activity Permission",
                 onRequest = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -271,7 +271,7 @@ private fun StagedPermissionsStage(onComplete: () -> Unit) {
             3 -> PermissionExplanationCard(
                 icon = Icons.Default.Notifications,
                 title = "Notifications Permission",
-                explanation = "This shows a subtle background notification letting you know your safety buffer is active.",
+                explanation = "This shows a subtle background notification letting you know TRACE protection is active.",
                 buttonText = "Enable Notifications & Finish",
                 onRequest = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

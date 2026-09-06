@@ -57,7 +57,7 @@ class BlackboxGlanceWidget : GlanceAppWidget() {
                 verticalAlignment = Alignment.Vertical.CenterVertically
             ) {
                 Text(
-                    text = "Black Box Status:",
+                    text = "TRACE Status:",
                     style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 )
                 Spacer(modifier = GlanceModifier.width(8.dp))

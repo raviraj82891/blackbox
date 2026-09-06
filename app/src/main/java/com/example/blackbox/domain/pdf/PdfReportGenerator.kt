@@ -38,7 +38,7 @@ class PdfReportGenerator(private val context: Context) {
         paint.color = Color.WHITE
         paint.textSize = 20f
         paint.isFakeBoldText = true
-        canvas.drawText("HUMAN DIGITAL BLACK BOX", 30f, 45f, paint)
+        canvas.drawText("TRACE — DIGITAL BLACK BOX", 30f, 45f, paint)
 
         paint.textSize = 12f
         paint.isFakeBoldText = false
@@ -117,7 +117,7 @@ class PdfReportGenerator(private val context: Context) {
 
         pdfDocument.finishPage(page)
 
-        val outputFile = File(context.cacheDir, "Incident_Report_${report.id.take(8)}.pdf")
+        val outputFile = File(context.cacheDir, "TRACE_Report_${report.id.take(8)}.pdf")
         pdfDocument.writeTo(FileOutputStream(outputFile))
         pdfDocument.close()
 

@@ -59,7 +59,7 @@ class BlackboxForegroundService : Service() {
         super.onCreate()
         createNotificationChannel()
 
-        startForeground(NOTIFICATION_ID, buildNotification("Black Box Active — Protection Active"))
+        startForeground(NOTIFICATION_ID, buildNotification("TRACE Protection Active — Recording Your Last Hour"))
         startSensorCollection()
     }
 
@@ -156,12 +156,12 @@ class BlackboxForegroundService : Service() {
 
     fun pauseCollection() {
         _isRecording.value = false
-        updateNotification("Protection Paused — Sensor Buffer Off")
+        updateNotification("TRACE Protection Paused — Sensor Buffer Off")
     }
 
     fun resumeCollection() {
         _isRecording.value = true
-        updateNotification("Protection Active — Recording Your Last Hour")
+        updateNotification("TRACE Protection Active — Recording Your Last Hour")
     }
 
     fun triggerManualSos() {
@@ -172,10 +172,10 @@ class BlackboxForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Blackbox Protection Service",
+                "TRACE Protection Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Shows active status of your privacy-preserving black box buffer"
+                description = "Shows active status of your TRACE privacy-preserving safety buffer"
             }
             val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
@@ -191,7 +191,7 @@ class BlackboxForegroundService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Human Digital Black Box")
+            .setContentTitle("TRACE — Digital Black Box")
             .setContentText(contentText)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingIntent)
@@ -211,7 +211,7 @@ class BlackboxForegroundService : Service() {
     }
 
     companion object {
-        const val CHANNEL_ID = "blackbox_service_channel"
+        const val CHANNEL_ID = "trace_service_channel"
         const val NOTIFICATION_ID = 1001
 
         const val ACTION_STOP_SERVICE = "ACTION_STOP_SERVICE"

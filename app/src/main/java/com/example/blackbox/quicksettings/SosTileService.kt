@@ -28,7 +28,7 @@ class SosTileService : TileService() {
     override fun onStartListening() {
         super.onStartListening()
         qsTile?.apply {
-            label = "Blackbox SOS"
+            label = "TRACE SOS"
             state = Tile.STATE_INACTIVE
             updateTile()
         }
