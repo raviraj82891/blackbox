@@ -2,6 +2,8 @@ package com.example.blackbox.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.blackbox.data.crypto.KeyManagementService
+import com.example.blackbox.data.crypto.MedicalIdData
 import com.example.blackbox.data.repository.BlackboxRepository
 import com.example.blackbox.domain.trigger.TriggerDetector
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,6 +17,7 @@ import javax.inject.Inject
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     val repository: BlackboxRepository,
+    val keyManagementService: KeyManagementService,
     val triggerDetector: TriggerDetector
 ) : ViewModel() {
 
@@ -23,6 +26,9 @@ class SettingsViewModel @Inject constructor(
 
     private val _calibrationProgress = MutableStateFlow(0f)
     val calibrationProgress: StateFlow<Float> = _calibrationProgress.asStateFlow()
+
+    private val _medicalIdData = MutableStateFlow(keyManagementService.getMedicalIdData())
+    val medicalIdData: StateFlow<MedicalIdData> = _medicalIdData.asStateFlow()
 
     /**
      * Feature 2.3: Personal Calibration step.
@@ -45,6 +51,11 @@ class SettingsViewModel @Inject constructor(
 
             _isCalibrating.value = false
         }
+    }
+
+    fun saveMedicalIdData(data: MedicalIdData) {
+        keyManagementService.saveMedicalIdData(data)
+        _medicalIdData.value = data
     }
 
     fun wipeAllData() {

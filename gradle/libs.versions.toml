@@ -25,6 +25,7 @@ hilt = "2.51.1"
 hiltNavigationCompose = "1.2.0"
 hiltWork = "1.2.0"
 glance = "1.1.0"
+zxing = "3.5.3"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -83,6 +84,9 @@ sqlcipher-android = { group = "net.zetetic", name = "android-database-sqlcipher"
 
 # Coroutines
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+
+# ZXing QR Code
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

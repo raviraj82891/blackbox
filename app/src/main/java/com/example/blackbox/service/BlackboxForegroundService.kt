@@ -22,6 +22,7 @@ import com.example.blackbox.sensor.AudioClassifierCollector
 import com.example.blackbox.sensor.BatteryCollector
 import com.example.blackbox.sensor.LocationCollector
 import com.example.blackbox.sensor.SensorCollector
+import com.example.blackbox.sensor.UserActivityState
 import com.example.blackbox.sensor.WifiSnapshotCollector
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -48,6 +49,9 @@ class BlackboxForegroundService : Service() {
 
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording.asStateFlow()
+
+    private var locationJob: Job? = null
+    private var currentIsMovingState = false
 
     inner class LocalBinder : Binder() {
         fun getService(): BlackboxForegroundService = this@BlackboxForegroundService
@@ -108,27 +112,35 @@ class BlackboxForegroundService : Service() {
             }
         }
 
-        // 3. Activity Recognition Transition Flow
+        // 3. Activity Recognition Transition Flow -> Dynamically drives location sampling
         serviceScope.launch {
             activityCollector.startTransitionUpdates().collect { activityReading ->
                 if (!_isRecording.value) return@collect
                 val payload = """{"state":"${activityReading.state.name}","confidence":${activityReading.confidence}}"""
                 repository.recordSensorEvent(EventType.ACTIVITY, payload, activityReading.timestampMs)
+
+                // Derive movement status dynamically: STILL/UNKNOWN -> false, WALKING/RUNNING/IN_VEHICLE -> true
+                val isMoving = activityReading.state == UserActivityState.WALKING ||
+                        activityReading.state == UserActivityState.RUNNING ||
+                        activityReading.state == UserActivityState.IN_VEHICLE
+
+                val bat = batteryCollector.getBatteryStatus()
+                val isPowerSaver = bat.levelPercentage < 15 && !bat.isCharging
+
+                // Battery Saver forces low power interval regardless of movement
+                val effectiveIsMoving = if (isPowerSaver) false else isMoving
+
+                if (effectiveIsMoving != currentIsMovingState || locationJob == null) {
+                    currentIsMovingState = effectiveIsMoving
+                    restartLocationSampling(locationCollector, effectiveIsMoving)
+                }
             }
         }
 
-        // 4. Adaptive Location Flow
-        serviceScope.launch {
-            locationCollector.observeAdaptiveLocation(isMoving = true).collect { loc ->
-                if (!_isRecording.value) return@collect
-                val payload = """{"latitude":%.6f,"longitude":%.6f,"speed":%.2f,"accuracy":%.1f}""".format(
-                    loc.latitude, loc.longitude, loc.speed, loc.accuracy
-                )
-                repository.recordSensorEvent(EventType.LOCATION, payload, loc.timestampMs)
-            }
-        }
+        // Initial location sampling
+        restartLocationSampling(locationCollector, isMoving = false)
 
-        // 5. Audio Classifier Flow (Battery Saver pauses audio classifier)
+        // 4. Audio Classifier Flow (Battery Saver pauses audio classifier)
         serviceScope.launch {
             audioCollector.observeAudioEvents().collect { audioEvent ->
                 if (!_isRecording.value) return@collect
@@ -142,7 +154,7 @@ class BlackboxForegroundService : Service() {
             }
         }
 
-        // 6. Battery & Environment periodic sampling
+        // 5. Battery & Environment periodic sampling
         serviceScope.launch {
             val bat = batteryCollector.getBatteryStatus()
             val batPayload = """{"level":${bat.levelPercentage},"isCharging":${bat.isCharging}}"""
@@ -151,6 +163,19 @@ class BlackboxForegroundService : Service() {
             val wifi = wifiCollector.captureSnapshot()
             val wifiPayload = """{"ssid":"${wifi.connectedSsid ?: ""}","signalDbm":${wifi.signalLevelDbm},"accessPoints":${wifi.nearbyAccessPointCount}}"""
             repository.recordSensorEvent(EventType.WIFI, wifiPayload, wifi.timestampMs)
+        }
+    }
+
+    private fun restartLocationSampling(locationCollector: LocationCollector, isMoving: Boolean) {
+        locationJob?.cancel()
+        locationJob = serviceScope.launch {
+            locationCollector.observeAdaptiveLocation(isMoving = isMoving).collect { loc ->
+                if (!_isRecording.value) return@collect
+                val payload = """{"latitude":%.6f,"longitude":%.6f,"speed":%.2f,"accuracy":%.1f}""".format(
+                    loc.latitude, loc.longitude, loc.speed, loc.accuracy
+                )
+                repository.recordSensorEvent(EventType.LOCATION, payload, loc.timestampMs)
+            }
         }
     }
 

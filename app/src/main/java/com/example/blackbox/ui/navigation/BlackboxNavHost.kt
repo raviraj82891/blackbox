@@ -3,7 +3,9 @@ package com.example.blackbox.ui.navigation
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Settings
@@ -25,6 +27,8 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object Home : Screen("home", "Status", Icons.Default.Home)
     object Timeline : Screen("timeline", "Timeline", Icons.AutoMirrored.Filled.List)
     object Incidents : Screen("incidents", "Reports", Icons.Default.Report)
+    object Analytics : Screen("analytics", "Analytics", Icons.Default.Analytics)
+    object MedicalQr : Screen("medical_qr", "Medical ID", Icons.Default.MedicalServices)
     object Contacts : Screen("contacts", "Contacts", Icons.Default.People)
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
 }
@@ -36,11 +40,12 @@ fun BlackboxNavHost(
     val navController = rememberNavController()
     var isOnboardingCompleted by remember { mutableStateOf(false) }
 
-    // Bottom Navigation Items (Section 3: Debug removed from primary nav)
     val navItems = listOf(
         Screen.Home,
         Screen.Timeline,
         Screen.Incidents,
+        Screen.Analytics,
+        Screen.MedicalQr,
         Screen.Contacts,
         Screen.Settings
     )
@@ -138,7 +143,32 @@ fun BlackboxNavHost(
                 IncidentReportScreen(
                     reports = incidentReports,
                     onUploadClicked = { report -> viewModel.uploadIncident(report) },
-                    onExportPdfClicked = { report -> viewModel.generatePdfReport(report) }
+                    onExportPdfClicked = { report -> viewModel.generatePdfReport(report) },
+                    onVerifyIntegrityClicked = { report -> viewModel.verifyIncidentIntegrity(report) }
+                )
+            }
+
+            composable(Screen.Analytics.route) {
+                val viewModel: AnalyticsViewModel = hiltViewModel()
+                val totalEventsCount by viewModel.totalEventsCount.collectAsState()
+                val autoCrashCount by viewModel.autoCrashCount.collectAsState()
+                val manualSosCount by viewModel.manualSosCount.collectAsState()
+
+                AnalyticsScreen(
+                    totalEventsCount = totalEventsCount,
+                    cancelledCountdownsCount = viewModel.triggerDetector.shouldSuggestThresholdAdjustment().let { 0 },
+                    autoCrashCount = autoCrashCount,
+                    manualSosCount = manualSosCount
+                )
+            }
+
+            composable(Screen.MedicalQr.route) {
+                val settingsViewModel: SettingsViewModel = hiltViewModel()
+                val medicalIdData by settingsViewModel.medicalIdData.collectAsState()
+
+                MedicalQrScreen(
+                    medicalId = medicalIdData,
+                    onSaveMedicalId = { settingsViewModel.saveMedicalIdData(it) }
                 )
             }
 

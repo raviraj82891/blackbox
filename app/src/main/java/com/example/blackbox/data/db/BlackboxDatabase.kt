@@ -11,7 +11,7 @@ import net.sqlcipher.database.SupportFactory
 
 @Database(
     entities = [SensorEvent::class, IncidentReport::class, EmergencyContact::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -33,6 +33,14 @@ abstract class BlackboxDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `incident_reports` ADD COLUMN `severityScore` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `incident_reports` ADD COLUMN `digitalSignature` TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE `incident_reports` ADD COLUMN `publicKeyBase64` TEXT DEFAULT NULL")
+            }
+        }
+
         fun getInstance(context: Context, passphrase: String): BlackboxDatabase {
             return INSTANCE ?: synchronized(this) {
                 val factory = SupportFactory(passphrase.toByteArray(Charsets.UTF_8))
@@ -42,7 +50,7 @@ abstract class BlackboxDatabase : RoomDatabase() {
                     "blackbox_encrypted.db"
                 )
                     .openHelperFactory(factory)
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
                 INSTANCE = instance

@@ -14,5 +14,8 @@ data class IncidentReport(
     val chainRootHash: String,
     val uploadStatus: UploadStatus = UploadStatus.PENDING,
     val encryptedBundle: String? = null,
-    val decryptionKey: String? = null
+    val decryptionKey: String? = null,
+    val severityScore: Int = 0,
+    val digitalSignature: String? = null,
+    val publicKeyBase64: String? = null
 )

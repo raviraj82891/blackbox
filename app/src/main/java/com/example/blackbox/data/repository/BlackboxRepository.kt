@@ -13,6 +13,7 @@ import com.example.blackbox.data.db.SensorEvent
 import com.example.blackbox.data.db.SensorEventDao
 import com.example.blackbox.data.db.TriggerType
 import com.example.blackbox.data.db.UploadStatus
+import com.example.blackbox.domain.fusion.FusionEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -96,6 +97,7 @@ class BlackboxRepository(
 
     /**
      * Freezes current rolling buffer, reconstructs the timeline, generates a Merkle-style root hash,
+     * calculates the Incident Severity Score (0-100), signs the root hash with Keystore RSA key,
      * encrypts the report client-side using AES-256-GCM, and stores an IncidentReport.
      */
     suspend fun freezeBufferAndCreateIncident(
@@ -109,6 +111,14 @@ class BlackboxRepository(
         val hashes = events.map { it.entryHash }
         val chainRootHash = HashChainManager.computeChainRootHash(hashes)
 
+        // Feature 2.1: Incident Severity Score (0-100)
+        val severityScore = FusionEngine.calculateIncidentSeverityScore(events)
+
+        // Feature 2.2: Asymmetric RSA Key Pair Digital Signature
+        val (digitalSignature, publicKeyBase64) = runCatching {
+            keyManagementService.signData(chainRootHash)
+        }.getOrDefault(Pair("", ""))
+
         // Envelope encryption client-side (Zero-Knowledge)
         val (encryptedBundle, keyBase64) = keyManagementService.encryptIncidentBundle(timelineJson)
 
@@ -120,7 +130,10 @@ class BlackboxRepository(
             chainRootHash = chainRootHash,
             uploadStatus = UploadStatus.ENCRYPTED,
             encryptedBundle = encryptedBundle,
-            decryptionKey = keyBase64
+            decryptionKey = keyBase64,
+            severityScore = severityScore,
+            digitalSignature = digitalSignature,
+            publicKeyBase64 = publicKeyBase64
         )
 
         incidentReportDao.insert(report)

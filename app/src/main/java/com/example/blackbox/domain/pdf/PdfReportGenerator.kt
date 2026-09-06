@@ -14,7 +14,8 @@ import java.util.Locale
 /**
  * Generates an official, printable PDF Incident Report containing:
  * - Incident Metadata (UUID, Trigger Type, Timestamp)
- * - Cryptographic Security Proof (Merkle Root Hash)
+ * - Incident Severity Score (0-100)
+ * - Cryptographic Security Proof (Merkle Root Hash & Digital Signature)
  * - Actual Reconstructed Event Timeline for first responders / family members
  */
 class PdfReportGenerator(private val context: Context) {
@@ -60,9 +61,11 @@ class PdfReportGenerator(private val context: Context) {
         canvas.drawText("Trigger Type: ${report.triggerType.name}", 30f, yPos, paint)
         yPos += 15f
         canvas.drawText("Triggered At: ${dateFormat.format(Date(report.triggeredAt))}", 30f, yPos, paint)
+        yPos += 15f
+        canvas.drawText("Incident Severity Score: ${report.severityScore} / 100", 30f, yPos, paint)
         yPos += 25f
 
-        // Cryptographic Hash Section
+        // Cryptographic Hash & Digital Signature Section
         paint.color = Color.parseColor("#0F172A")
         paint.textSize = 12f
         paint.isFakeBoldText = true
@@ -76,7 +79,16 @@ class PdfReportGenerator(private val context: Context) {
         yPos += 14f
         paint.color = Color.parseColor("#0284C7")
         canvas.drawText(report.chainRootHash, 30f, yPos, paint)
-        yPos += 25f
+        yPos += 18f
+
+        if (!report.digitalSignature.isNullOrBlank()) {
+            paint.color = Color.parseColor("#334155")
+            canvas.drawText("Android Keystore RSA Digital Signature:", 30f, yPos, paint)
+            yPos += 14f
+            paint.color = Color.parseColor("#16A34A")
+            canvas.drawText(report.digitalSignature.orEmpty().take(60) + "...", 30f, yPos, paint)
+            yPos += 25f
+        }
 
         // Reconstructed Timeline Section Header
         paint.color = Color.BLACK

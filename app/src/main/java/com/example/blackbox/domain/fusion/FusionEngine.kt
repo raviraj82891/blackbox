@@ -39,11 +39,43 @@ enum class SeverityLevel {
 
 /**
  * Fusion Engine — Rule-based state machine turning raw heterogeneous readings into
- * a human-readable, chronological incident timeline.
+ * a human-readable, chronological incident timeline and computing the 0-100 Incident Severity Score.
  */
 object FusionEngine {
 
+    // Feature 2.1: Named Constants for Severity Score Weights
+    const val ACCEL_WEIGHT = 0.40f
+    const val GYRO_WEIGHT = 0.20f
+    const val AUDIO_WEIGHT = 0.20f
+    const val STILLNESS_WEIGHT = 0.20f
+
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+
+    fun calculateIncidentSeverityScore(events: List<SensorEvent>): Int {
+        if (events.isEmpty()) return 0
+
+        val maxAccelMag = events.filter { it.type == EventType.ACCEL }
+            .mapNotNull { runCatching { JSONObject(it.payloadJson).optDouble("magnitude", 0.0) }.getOrNull() }
+            .maxOrNull() ?: 9.81
+        val accelScore = ((maxAccelMag - 9.81) / (40.0 - 9.81)).coerceIn(0.0, 1.0) * 100.0
+
+        val maxGyroDelta = events.filter { it.type == EventType.GYRO }
+            .mapNotNull { runCatching { JSONObject(it.payloadJson).optDouble("deltaMagnitude", 0.0) }.getOrNull() }
+            .maxOrNull() ?: 0.0
+        val gyroScore = (maxGyroDelta / 5.0).coerceIn(0.0, 1.0) * 100.0
+
+        val hasAudioImpact = events.any { it.type == EventType.AUDIO_EVENT && it.payloadJson.contains("LOUD") }
+        val audioScore = if (hasAudioImpact) 100.0 else 0.0
+
+        val stillnessScore = 80.0 // Post-impact stillness baseline score
+
+        val finalScore = (accelScore * ACCEL_WEIGHT) +
+                (gyroScore * GYRO_WEIGHT) +
+                (audioScore * AUDIO_WEIGHT) +
+                (stillnessScore * STILLNESS_WEIGHT)
+
+        return finalScore.toInt().coerceIn(0, 100)
+    }
 
     fun reconstructTimeline(rawEvents: List<SensorEvent>): List<TimelineEntry> {
         val sortedEvents = rawEvents.sortedBy { it.timestampMs }
@@ -138,8 +170,6 @@ object FusionEngine {
                     val label = json?.optString("eventLabel", "AMBIENT") ?: "AMBIENT"
                     val db = json?.optDouble("decibels", 0.0) ?: 0.0
 
-                    // CO-OCCURRENCE VERIFICATION:
-                    // Only elevate to LOUD_IMPACT if co-occurs with accelerometer/gyro motion spike within 2000ms
                     val hasCoOccurringMotionSpike = sortedEvents.any { motion ->
                         (motion.type == EventType.ACCEL || motion.type == EventType.GYRO) &&
                                 abs(motion.timestampMs - event.timestampMs) <= 2000L &&
@@ -209,9 +239,6 @@ object FusionEngine {
         return entries
     }
 
-    /**
-     * Groups raw timeline entries into sessions bounded by Activity Recognition transitions.
-     */
     fun groupTimelineIntoSessions(entries: List<TimelineEntry>): List<TimelineSession> {
         if (entries.isEmpty()) return emptyList()
 

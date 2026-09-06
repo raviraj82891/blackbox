@@ -2,6 +2,7 @@ package com.example.blackbox.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.blackbox.data.crypto.KeyManagementService
 import com.example.blackbox.data.db.IncidentReport
 import com.example.blackbox.data.repository.BlackboxRepository
 import com.example.blackbox.domain.pdf.PdfReportGenerator
@@ -16,11 +17,18 @@ import javax.inject.Inject
 @HiltViewModel
 class IncidentsViewModel @Inject constructor(
     private val repository: BlackboxRepository,
+    private val keyManagementService: KeyManagementService,
     private val pdfGenerator: PdfReportGenerator
 ) : ViewModel() {
 
     val incidentReports: StateFlow<List<IncidentReport>> = repository.getAllIncidentReports()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun verifyIncidentIntegrity(report: IncidentReport): Boolean {
+        val sig = report.digitalSignature ?: return false
+        val pubKey = report.publicKeyBase64 ?: return false
+        return keyManagementService.verifySignature(report.chainRootHash, sig, pubKey)
+    }
 
     fun uploadIncident(report: IncidentReport) {
         viewModelScope.launch {
