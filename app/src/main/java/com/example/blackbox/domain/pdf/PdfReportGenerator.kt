@@ -5,7 +5,6 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import com.example.blackbox.data.db.IncidentReport
-import com.example.blackbox.domain.fusion.FusionEngine
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -15,8 +14,8 @@ import java.util.Locale
 /**
  * Generates an official, printable PDF Incident Report containing:
  * - Incident Metadata (UUID, Trigger Type, Timestamp)
- * - Cryptographic Proof (Merkle Root Hash & Verification Status)
- * - Human-Readable Reconstructed Timeline
+ * - Cryptographic Security Proof (Merkle Root Hash)
+ * - Actual Reconstructed Event Timeline for first responders / family members
  */
 class PdfReportGenerator(private val context: Context) {
 
@@ -24,9 +23,10 @@ class PdfReportGenerator(private val context: Context) {
 
     fun generatePdfReport(report: IncidentReport): File {
         val pdfDocument = PdfDocument()
-        val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create() // A4 standard size in points
-        val page = pdfDocument.startPage(pageInfo)
-        val canvas = page.canvas
+        var pageNumber = 1
+        var pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create() // A4 standard size in points
+        var page = pdfDocument.startPage(pageInfo)
+        var canvas = page.canvas
 
         val paint = Paint().apply { isAntiAlias = true }
 
@@ -42,7 +42,7 @@ class PdfReportGenerator(private val context: Context) {
 
         paint.textSize = 12f
         paint.isFakeBoldText = false
-        canvas.drawText("Incident Reconstruction Report | Tamper-Evident Manifest", 30f, 70f, paint)
+        canvas.drawText("Incident Reconstruction Report | Emergency Summary", 30f, 70f, paint)
 
         var yPos = 130f
 
@@ -60,46 +60,60 @@ class PdfReportGenerator(private val context: Context) {
         canvas.drawText("Trigger Type: ${report.triggerType.name}", 30f, yPos, paint)
         yPos += 15f
         canvas.drawText("Triggered At: ${dateFormat.format(Date(report.triggeredAt))}", 30f, yPos, paint)
-        yPos += 15f
-        canvas.drawText("Upload Status: ${report.uploadStatus.name}", 30f, yPos, paint)
         yPos += 25f
 
         // Cryptographic Hash Section
         paint.color = Color.parseColor("#0F172A")
         paint.textSize = 12f
         paint.isFakeBoldText = true
-        canvas.drawText("CRYPTOGRAPHIC INTEGRITY PROOF", 30f, yPos, paint)
+        canvas.drawText("DIGITAL SECURITY PROOF", 30f, yPos, paint)
         yPos += 18f
 
         paint.color = Color.parseColor("#334155")
         paint.textSize = 9f
         paint.isFakeBoldText = false
-        canvas.drawText("Merkle Chain Root Hash:", 30f, yPos, paint)
+        canvas.drawText("Merkle Chain Root Hash (Tamper-Evidence):", 30f, yPos, paint)
         yPos += 14f
         paint.color = Color.parseColor("#0284C7")
         canvas.drawText(report.chainRootHash, 30f, yPos, paint)
         yPos += 25f
 
-        // Reconstructed Timeline Section
+        // Reconstructed Timeline Section Header
         paint.color = Color.BLACK
         paint.textSize = 14f
         paint.isFakeBoldText = true
-        canvas.drawText("RECONSTRUCTED TIMELINE (LAST 60 MIN)", 30f, yPos, paint)
+        canvas.drawText("RECONSTRUCTED TIMELINE", 30f, yPos, paint)
         yPos += 20f
 
         paint.color = Color.DKGRAY
         paint.textSize = 9f
         paint.isFakeBoldText = false
 
-        val rawEvents = runCatching {
-            // Parse raw timeline json
-            val list = mutableListOf<String>()
-            list
-        }.getOrDefault(emptyList())
+        // Parse and print actual reconstructed timeline lines
+        val timelineLines = report.timelineJson.lines().filter { it.isNotBlank() }
 
-        canvas.drawText("Timeline data encrypted and stored securely.", 30f, yPos, paint)
-        yPos += 15f
-        canvas.drawText("Timeline payload length: ${report.timelineJson.length} chars", 30f, yPos, paint)
+        if (timelineLines.isEmpty()) {
+            canvas.drawText("No specific event entries recorded prior to trigger.", 30f, yPos, paint)
+            yPos += 15f
+        } else {
+            for (line in timelineLines) {
+                // Check if page end reached (A4 height = 842)
+                if (yPos > 790f) {
+                    pdfDocument.finishPage(page)
+                    pageNumber++
+                    pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
+                    page = pdfDocument.startPage(pageInfo)
+                    canvas = page.canvas
+                    yPos = 40f
+                }
+
+                paint.color = Color.BLACK
+                paint.isFakeBoldText = true
+                val displayLine = if (line.length > 90) line.take(87) + "..." else line
+                canvas.drawText(displayLine, 30f, yPos, paint)
+                yPos += 16f
+            }
+        }
 
         pdfDocument.finishPage(page)
 

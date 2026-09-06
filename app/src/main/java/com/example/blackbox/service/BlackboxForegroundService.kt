@@ -17,6 +17,7 @@ import com.example.blackbox.data.db.EventType
 import com.example.blackbox.data.db.TriggerType
 import com.example.blackbox.data.repository.BlackboxRepository
 import com.example.blackbox.domain.trigger.TriggerDetector
+import com.example.blackbox.sensor.ActivityRecognitionCollector
 import com.example.blackbox.sensor.AudioClassifierCollector
 import com.example.blackbox.sensor.BatteryCollector
 import com.example.blackbox.sensor.LocationCollector
@@ -58,7 +59,7 @@ class BlackboxForegroundService : Service() {
         super.onCreate()
         createNotificationChannel()
 
-        startForeground(NOTIFICATION_ID, buildNotification("Black Box Active — Continuous 60m Buffer"))
+        startForeground(NOTIFICATION_ID, buildNotification("Black Box Active — Protection Active"))
         startSensorCollection()
     }
 
@@ -77,6 +78,7 @@ class BlackboxForegroundService : Service() {
 
         val sensorCollector = SensorCollector(applicationContext)
         val locationCollector = LocationCollector(applicationContext)
+        val activityCollector = ActivityRecognitionCollector(applicationContext)
         val audioCollector = AudioClassifierCollector(applicationContext)
         val wifiCollector = WifiSnapshotCollector(applicationContext)
         val batteryCollector = BatteryCollector(applicationContext)
@@ -106,7 +108,27 @@ class BlackboxForegroundService : Service() {
             }
         }
 
-        // 3. Audio Classifier Flow (Feature 2.5: Battery Saver pauses audio classifier)
+        // 3. Activity Recognition Transition Flow
+        serviceScope.launch {
+            activityCollector.startTransitionUpdates().collect { activityReading ->
+                if (!_isRecording.value) return@collect
+                val payload = """{"state":"${activityReading.state.name}","confidence":${activityReading.confidence}}"""
+                repository.recordSensorEvent(EventType.ACTIVITY, payload, activityReading.timestampMs)
+            }
+        }
+
+        // 4. Adaptive Location Flow
+        serviceScope.launch {
+            locationCollector.observeAdaptiveLocation(isMoving = true).collect { loc ->
+                if (!_isRecording.value) return@collect
+                val payload = """{"latitude":%.6f,"longitude":%.6f,"speed":%.2f,"accuracy":%.1f}""".format(
+                    loc.latitude, loc.longitude, loc.speed, loc.accuracy
+                )
+                repository.recordSensorEvent(EventType.LOCATION, payload, loc.timestampMs)
+            }
+        }
+
+        // 5. Audio Classifier Flow (Battery Saver pauses audio classifier)
         serviceScope.launch {
             audioCollector.observeAudioEvents().collect { audioEvent ->
                 if (!_isRecording.value) return@collect
@@ -120,7 +142,7 @@ class BlackboxForegroundService : Service() {
             }
         }
 
-        // 4. Battery & Environment periodic sampling
+        // 6. Battery & Environment periodic sampling
         serviceScope.launch {
             val bat = batteryCollector.getBatteryStatus()
             val batPayload = """{"level":${bat.levelPercentage},"isCharging":${bat.isCharging}}"""
@@ -134,12 +156,12 @@ class BlackboxForegroundService : Service() {
 
     fun pauseCollection() {
         _isRecording.value = false
-        updateNotification("Black Box Paused — Sensor Ingestion Off")
+        updateNotification("Protection Paused — Sensor Buffer Off")
     }
 
     fun resumeCollection() {
         _isRecording.value = true
-        updateNotification("Black Box Active — Continuous 60m Buffer")
+        updateNotification("Protection Active — Recording Your Last Hour")
     }
 
     fun triggerManualSos() {
@@ -153,7 +175,7 @@ class BlackboxForegroundService : Service() {
                 "Blackbox Protection Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Shows active status of the privacy-preserving black box sensor buffer"
+                description = "Shows active status of your privacy-preserving black box buffer"
             }
             val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)

@@ -1,16 +1,17 @@
 package com.example.blackbox.ui.screens
 
 import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -42,12 +43,12 @@ fun IncidentReportScreen(
                 .padding(16.dp)
         ) {
             Text(
-                text = "Frozen Incident Bundles",
+                text = "Your Saved Reports",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Tamper-evident, client-side encrypted reports",
+                text = "Encrypted incident reports generated during emergencies or manual SOS activations",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -60,7 +61,7 @@ fun IncidentReportScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No incidents recorded. Use 'Simulate Incident' or Manual SOS to generate a test report.",
+                        text = "No saved reports. Reports will appear here automatically if an emergency occurs or if you test manual SOS.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -69,6 +70,8 @@ fun IncidentReportScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(reports) { report ->
+                        var showProofDetails by remember { mutableStateOf(false) }
+
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(20.dp),
@@ -103,7 +106,7 @@ fun IncidentReportScreen(
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 Text(
-                                    text = "Incident ID: ${report.id.take(8)}...",
+                                    text = "Report ID: ${report.id.take(8)}...",
                                     fontWeight = FontWeight.Bold,
                                     style = MaterialTheme.typography.bodyMedium
                                 )
@@ -116,17 +119,37 @@ fun IncidentReportScreen(
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Column(modifier = Modifier.padding(10.dp)) {
-                                        Text(
-                                            text = "Merkle Root Hash (Integrity Proof):",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold
-                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "Digital Security Proof",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            TextButton(onClick = { showProofDetails = !showProofDetails }) {
+                                                Text(if (showProofDetails) "Hide" else "Why this matters", fontSize = 10.sp)
+                                            }
+                                        }
+
                                         Text(
                                             text = report.chainRootHash,
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 10.sp,
                                             color = MaterialTheme.colorScheme.primary
                                         )
+
+                                        AnimatedVisibility(visible = showProofDetails) {
+                                            Column(modifier = Modifier.padding(top = 6.dp)) {
+                                                Text(
+                                                    text = "This cryptographic Merkle root hash mathematical seal proves this timeline was recorded in real time and has not been altered or modified by anyone.",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
                                     }
                                 }
 
@@ -164,7 +187,7 @@ fun IncidentReportScreen(
                                     ) {
                                         Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("AWS Upload")
+                                        Text("Cloud Backup")
                                     }
                                 }
                             }

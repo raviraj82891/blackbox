@@ -3,7 +3,6 @@ package com.example.blackbox.ui.navigation
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Report
@@ -25,10 +24,9 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object Onboarding : Screen("onboarding", "Onboarding", Icons.Default.Home)
     object Home : Screen("home", "Status", Icons.Default.Home)
     object Timeline : Screen("timeline", "Timeline", Icons.AutoMirrored.Filled.List)
-    object Incidents : Screen("incidents", "Incidents", Icons.Default.Report)
+    object Incidents : Screen("incidents", "Reports", Icons.Default.Report)
     object Contacts : Screen("contacts", "Contacts", Icons.Default.People)
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
-    object Debug : Screen("debug", "Debug", Icons.Default.BugReport)
 }
 
 @Composable
@@ -38,13 +36,13 @@ fun BlackboxNavHost(
     val navController = rememberNavController()
     var isOnboardingCompleted by remember { mutableStateOf(false) }
 
+    // Bottom Navigation Items (Section 3: Debug removed from primary nav)
     val navItems = listOf(
         Screen.Home,
         Screen.Timeline,
         Screen.Incidents,
         Screen.Contacts,
-        Screen.Settings,
-        Screen.Debug
+        Screen.Settings
     )
 
     val currentBackStack by navController.currentBackStackEntryAsState()
@@ -94,6 +92,7 @@ fun BlackboxNavHost(
                 val isBatterySaverActive by viewModel.isBatterySaverActive.collectAsState()
                 val bufferEventCount by viewModel.bufferEventCount.collectAsState()
                 val savedContactCount by viewModel.savedContactCount.collectAsState()
+                val isChainValid by viewModel.isChainValid.collectAsState()
                 val countdownState by viewModel.countdownState.collectAsState()
                 val sparklinePoints by viewModel.sparklinePoints.collectAsState()
                 val situationalStatus by viewModel.situationalStatus.collectAsState()
@@ -104,7 +103,7 @@ fun BlackboxNavHost(
                     isBatterySaverActive = isBatterySaverActive,
                     bufferEventCount = bufferEventCount,
                     savedContactCount = savedContactCount,
-                    isChainValid = true,
+                    isChainValid = isChainValid,
                     sparklinePoints = sparklinePoints,
                     situationalStatus = situationalStatus,
                     countdownState = countdownState,
@@ -116,7 +115,8 @@ fun BlackboxNavHost(
                     onManualSosClicked = { viewModel.triggerManualSos() },
                     onCancelCountdownClicked = { viewModel.cancelCountdown() },
                     onApplyAdaptiveThreshold = { viewModel.applyAdaptiveThreshold() },
-                    onDismissAdaptivePrompt = { viewModel.dismissAdaptivePrompt() }
+                    onDismissAdaptivePrompt = { viewModel.dismissAdaptivePrompt() },
+                    onNavigateToContacts = { navController.navigate(Screen.Contacts.route) }
                 )
             }
 
@@ -156,6 +156,7 @@ fun BlackboxNavHost(
 
             composable(Screen.Settings.route) {
                 val viewModel: SettingsViewModel = hiltViewModel()
+                val homeViewModel: HomeViewModel = hiltViewModel()
                 val isCalibrating by viewModel.isCalibrating.collectAsState()
                 val calibrationProgress by viewModel.calibrationProgress.collectAsState()
 
@@ -167,19 +168,11 @@ fun BlackboxNavHost(
                     onStartCalibrationClicked = { viewModel.startPersonalCalibration() },
                     onImpactThresholdChanged = { viewModel.triggerDetector.impactThresholdMs2 = it },
                     onGyroThresholdChanged = { viewModel.triggerDetector.gyroThresholdRad = it },
-                    onWipeDataClicked = { viewModel.wipeAllData() }
-                )
-            }
-
-            composable(Screen.Debug.route) {
-                val homeViewModel: HomeViewModel = hiltViewModel()
-
-                DebugScreen(
+                    onWipeDataClicked = { viewModel.wipeAllData() },
                     onSimulateCrashClicked = {
-                        // Triggers simulated crash sequence
                         homeViewModel.triggerDetector.startCountdown(TriggerType.SIMULATED, 34.7)
                     },
-                    onManualSosClicked = { homeViewModel.triggerManualSos() }
+                    onTestSosClicked = { homeViewModel.triggerManualSos() }
                 )
             }
         }

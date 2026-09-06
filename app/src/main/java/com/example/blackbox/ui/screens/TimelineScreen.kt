@@ -41,7 +41,7 @@ fun TimelineScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Hash Chain Integrity Verification Banner
+            // Reassuring Plain-Language Banner (Section 4)
             Surface(
                 color = if (isChainValid) Color(0xFF065F46) else Color(0xFF991B1B),
                 modifier = Modifier.fillMaxWidth()
@@ -59,13 +59,13 @@ fun TimelineScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = if (isChainValid) "CRYPTO HASH CHAIN: INTACT & TAMPER-EVIDENT" else "WARNING: HASH CHAIN DISCREPANCY",
+                            text = if (isChainValid) "Your last hour is recorded safely and hasn't been tampered with" else "WARNING: Log Discrepancy Detected",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp
                         )
                         Text(
-                            text = "SHA-256 prevHash links verified across rolling buffer",
+                            text = "Every event is cryptographically sealed for post-hoc integrity verification",
                             color = Color.White.copy(alpha = 0.8f),
                             fontSize = 10.sp
                         )
@@ -81,7 +81,7 @@ fun TimelineScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Rolling 60m buffer collecting initial session telemetry...",
+                        text = "Rolling 60m buffer collecting initial session activity...",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -174,7 +174,7 @@ private fun TimelineSessionCard(session: TimelineSession) {
                     color = badgeColor.copy(alpha = 0.15f)
                 ) {
                     Text(
-                        text = "Peak Severity: ${session.worstSeverity.name}",
+                        text = "Peak Event: ${session.worstSeverity.name}",
                         color = badgeColor,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
@@ -194,7 +194,7 @@ private fun TimelineSessionCard(session: TimelineSession) {
 
             AnimatedVisibility(visible = expanded) {
                 Column(modifier = Modifier.padding(top = 14.dp)) {
-                    Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                     Spacer(modifier = Modifier.height(12.dp))
                     session.entries.forEach { entry ->
                         TimelineEntryCard(entry)
@@ -208,6 +208,8 @@ private fun TimelineSessionCard(session: TimelineSession) {
 
 @Composable
 private fun TimelineEntryCard(entry: TimelineEntry) {
+    var showTechDetails by remember { mutableStateOf(false) }
+
     val badgeColor = when (entry.severityLevel) {
         SeverityLevel.CRITICAL -> Color(0xFFDC2626)
         SeverityLevel.WARNING -> Color(0xFFD97706)
@@ -260,6 +262,21 @@ private fun TimelineEntryCard(entry: TimelineEntry) {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            TextButton(
+                onClick = { showTechDetails = !showTechDetails },
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text(if (showTechDetails) "Hide Technical Proof" else "Technical Details", fontSize = 10.sp)
+            }
+
+            if (showTechDetails) {
+                Column(modifier = Modifier.padding(top = 4.dp)) {
+                    Text("SHA-256 Seal: ${entry.entryHash}", fontFamily = FontFamily.Monospace, fontSize = 9.sp, color = MaterialTheme.colorScheme.secondary)
+                }
+            }
         }
     }
 }

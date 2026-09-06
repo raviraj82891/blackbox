@@ -1,5 +1,6 @@
 package com.example.blackbox.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -7,10 +8,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -23,8 +29,12 @@ fun SettingsScreen(
     onStartCalibrationClicked: () -> Unit,
     onImpactThresholdChanged: (Double) -> Unit,
     onGyroThresholdChanged: (Double) -> Unit,
-    onWipeDataClicked: () -> Unit
+    onWipeDataClicked: () -> Unit,
+    onSimulateCrashClicked: () -> Unit,
+    onTestSosClicked: () -> Unit
 ) {
+    var showAdvancedTools by remember { mutableStateOf(false) }
+
     Scaffold { padding ->
         Column(
             modifier = Modifier
@@ -34,19 +44,19 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
-                text = "Blackbox Configuration",
+                text = "Sensitivity & Storage",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Tune sensitivity thresholds and retention parameters for viva testing",
+                text = "Adjust how sensitive crash detection is and manage saved data",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Feature 2.3: Personal Calibration Card
+            // Personal Calibration Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -64,7 +74,7 @@ fun SettingsScreen(
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Carry your phone normally for 10 seconds — we'll measure your baseline motion and derive a custom impact threshold.",
+                        text = "Carry your phone normally for 10 seconds to let the system measure your baseline motion and set a personalized crash sensitivity threshold.",
                         style = MaterialTheme.typography.bodySmall
                     )
 
@@ -94,7 +104,7 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Impact Threshold Slider
+            // Impact Sensitivity Slider
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -102,11 +112,11 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Impact Detection Threshold",
+                        text = "Crash Impact Sensitivity",
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Current: %.1f m/s² (approx %.1f G)".format(impactThreshold, impactThreshold / 9.81),
+                        text = "Trigger Level: %.1f m/s² (approx %.1f G)".format(impactThreshold, impactThreshold / 9.81),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -122,7 +132,7 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Gyroscope Threshold Slider
+            // Gyroscope Sensitivity Slider
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -130,11 +140,11 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Angular Gyro Delta Threshold",
+                        text = "Angular Motion Delta",
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Current: %.1f rad/s".format(gyroThreshold),
+                        text = "Trigger Level: %.1f rad/s".format(gyroThreshold),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -150,9 +160,73 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Danger Zone
+            // Advanced & Testing Tools Section (Section 3)
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(36.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Advanced & Testing Tools",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        IconButton(onClick = { showAdvancedTools = !showAdvancedTools }) {
+                            Icon(
+                                imageVector = if (showAdvancedTools) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = null
+                            )
+                        }
+                    }
+
+                    AnimatedVisibility(visible = showAdvancedTools) {
+                        Column(modifier = Modifier.padding(top = 12.dp)) {
+                            Text(
+                                text = "Use these tools to test emergency triggers without physically crashing your phone.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Button(
+                                onClick = onSimulateCrashClicked,
+                                modifier = Modifier.fillMaxWidth().height(46.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Inject Simulated Crash Sequence")
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            OutlinedButton(
+                                onClick = onTestSosClicked,
+                                modifier = Modifier.fillMaxWidth().height(46.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Test Emergency Countdown")
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Privacy & Data Control
             Text(
-                text = "Privacy & Storage Controls",
+                text = "Privacy & Data Controls",
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.error
             )
@@ -168,7 +242,7 @@ fun SettingsScreen(
             ) {
                 Icon(Icons.Default.Delete, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Perform Complete Data Wipe", fontWeight = FontWeight.Bold)
+                Text("Delete All Local Black Box Logs", fontWeight = FontWeight.Bold)
             }
         }
     }

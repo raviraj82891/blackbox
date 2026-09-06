@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
@@ -51,7 +52,8 @@ fun HomeScreen(
     onManualSosClicked: () -> Unit,
     onCancelCountdownClicked: () -> Unit,
     onApplyAdaptiveThreshold: () -> Unit,
-    onDismissAdaptivePrompt: () -> Unit
+    onDismissAdaptivePrompt: () -> Unit,
+    onNavigateToContacts: () -> Unit
 ) {
     var showWipeConfirmation by remember { mutableStateOf(false) }
 
@@ -61,7 +63,7 @@ fun HomeScreen(
         initialValue = 0.3f,
         targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1000),
+            animation = tween(1200),
             repeatMode = RepeatMode.Reverse
         ),
         label = "alpha"
@@ -81,32 +83,51 @@ fun HomeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
 
-                // Contact Requirement Warning Banner
+                // SECTION 5: Single most prominent card if NO emergency contact is saved
                 if (savedContactCount == 0) {
-                    Surface(
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 12.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.errorContainer
+                            .padding(bottom = 16.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                            Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.PersonAdd,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "To Complete Setup: Add an Emergency Contact",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "PARTIAL PROTECTION: Add an Emergency Contact in the Contacts tab to enable incident alerts.",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onErrorContainer
+                                text = "Black Box is recording your safety buffer, but cannot notify anyone if an emergency occurs until you save at least one contact.",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f)
                             )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Button(
+                                onClick = onNavigateToContacts,
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().height(48.dp)
+                            ) {
+                                Text("Add Emergency Contact Now", fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
 
-                // Battery Saver Warning Banner (Feature 2.5)
+                // Battery Saver Warning Banner
                 if (isBatterySaverActive) {
                     Surface(
                         modifier = Modifier
@@ -122,7 +143,7 @@ fun HomeScreen(
                             Icon(Icons.Default.BatteryAlert, contentDescription = null, tint = Color.White)
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "POWER SAVER ACTIVE (<15% Battery): Audio classification paused and location relaxed to preserve emergency power.",
+                                text = "Power Saver Active (<15% Battery): Reduced audio classification to preserve emergency power.",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -131,7 +152,7 @@ fun HomeScreen(
                     }
                 }
 
-                // Adaptive Threshold Suggestion Card (Feature 2.3)
+                // Adaptive Threshold Suggestion Card
                 if (suggestAdaptiveThreshold) {
                     Card(
                         modifier = Modifier
@@ -142,13 +163,13 @@ fun HomeScreen(
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(
-                                text = "Adaptive Sensitivity Prompt",
+                                text = "Adjust Sensitivity?",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Frequent cancellations detected. Would you like to automatically raise the impact threshold to reduce false alerts during normal activity?",
+                                text = "You've cancelled a few alerts during normal motion. Would you like to raise the crash sensitivity threshold to avoid false alarms?",
                                 style = MaterialTheme.typography.bodySmall
                             )
                             Spacer(modifier = Modifier.height(12.dp))
@@ -157,7 +178,7 @@ fun HomeScreen(
                                     onClick = onApplyAdaptiveThreshold,
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
-                                    Text("Raise Threshold")
+                                    Text("Raise Sensitivity Threshold")
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
                                 TextButton(onClick = onDismissAdaptivePrompt) {
@@ -168,7 +189,7 @@ fun HomeScreen(
                     }
                 }
 
-                // Main Status Header Card
+                // Main Reassuring Status Card
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
@@ -196,7 +217,7 @@ fun HomeScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (isServiceRunning && savedContactCount > 0) "FULL BLACK BOX PROTECTION ACTIVE" else if (isServiceRunning) "PARTIAL PROTECTION ACTIVE" else "PAUSED",
+                                text = if (isServiceRunning && savedContactCount > 0) "Protection Active — Recording Your Last Hour" else if (isServiceRunning) "Protection Active (Contact Setup Needed)" else "Protection Paused",
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp
@@ -217,9 +238,9 @@ fun HomeScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Feature 2.1: Real-time Accelerometer Sparkline Chart
+                // Section 4: "Your Movement Right Now" Sparkline
                 Text(
-                    text = "Live Motion Vector Sparkline (2m Window)",
+                    text = "Your Movement Right Now",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.align(Alignment.Start)
@@ -230,7 +251,7 @@ fun HomeScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(110.dp),
+                        .height(100.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
                 ) {
@@ -241,9 +262,9 @@ fun HomeScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Buffer Metrics Section
+                // Section 4: "Protection Status"
                 Text(
-                    text = "Buffer Health & Security",
+                    text = "Protection Status",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.align(Alignment.Start)
@@ -253,16 +274,16 @@ fun HomeScreen(
 
                 Row(modifier = Modifier.fillMaxWidth()) {
                     MetricCard(
-                        title = "Buffered Events",
+                        title = "Buffered Log Events",
                         value = "$bufferEventCount",
-                        subtitle = "60m Rolling Window",
+                        subtitle = "Rolling 60 Minutes",
                         modifier = Modifier.weight(1f)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     MetricCard(
-                        title = "Chain Integrity",
-                        value = if (isChainValid) "VERIFIED" else "TAMPERED",
-                        subtitle = if (isChainValid) "SHA-256 Intact" else "Discrepancy",
+                        title = "Tamper Security",
+                        value = if (isChainValid) "SAFE" else "CHECK LOGS",
+                        subtitle = if (isChainValid) "Timeline Unmodified" else "Discrepancy",
                         isSuccess = isChainValid,
                         modifier = Modifier.weight(1f)
                     )
@@ -284,7 +305,7 @@ fun HomeScreen(
                             contentDescription = null
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(if (isServiceRunning) "Pause" else "Resume")
+                        Text(if (isServiceRunning) "Pause Protection" else "Resume Protection")
                     }
 
                     Spacer(modifier = Modifier.width(12.dp))
@@ -305,7 +326,7 @@ fun HomeScreen(
 
                 Spacer(modifier = Modifier.height(28.dp))
 
-                // Manual SOS Button (Quick 3s Activation)
+                // Manual SOS Button
                 Button(
                     onClick = onManualSosClicked,
                     modifier = Modifier
@@ -350,7 +371,7 @@ fun HomeScreen(
     if (showWipeConfirmation) {
         AlertDialog(
             onDismissRequest = { showWipeConfirmation = false },
-            title = { Text("Purge All Black Box Data?") },
+            title = { Text("Purge All Black Box Logs?") },
             text = { Text("This will permanently erase all 60-minute sensor buffer logs and saved incident reports from this device.") },
             confirmButton = {
                 TextButton(
@@ -451,7 +472,7 @@ private fun CountdownBanner(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "POSSIBLE $triggerType DETECTED!",
+                text = "EMERGENCY $triggerType ACTIVATED",
                 color = Color.White,
                 fontWeight = FontWeight.Black,
                 fontSize = 16.sp
@@ -464,7 +485,7 @@ private fun CountdownBanner(
                 fontSize = 48.sp
             )
             Text(
-                text = "Freezing buffer and alerting contacts in $secondsRemaining s...",
+                text = "Notifying emergency contacts in $secondsRemaining s...",
                 color = Color.White.copy(alpha = 0.8f),
                 fontSize = 12.sp
             )

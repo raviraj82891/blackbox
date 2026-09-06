@@ -41,6 +41,9 @@ class HomeViewModel @Inject constructor(
     private val _isBatterySaverActive = MutableStateFlow(false)
     val isBatterySaverActive: StateFlow<Boolean> = _isBatterySaverActive.asStateFlow()
 
+    private val _isChainValid = MutableStateFlow(true)
+    val isChainValid: StateFlow<Boolean> = _isChainValid.asStateFlow()
+
     val bufferEventCount: StateFlow<Int> = repository.getBufferEventCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
@@ -69,13 +72,13 @@ class HomeViewModel @Inject constructor(
             } else "STILL"
 
             when (state) {
-                "IN_VEHICLE" -> "In Vehicle — Actively Monitoring High-Speed Motion"
-                "WALKING" -> "Walking — Normal Motion Monitoring"
-                "RUNNING" -> "Running — High Dynamic Motion Active"
-                else -> "Stationary — Low Activity Baseline"
+                "IN_VEHICLE" -> "In Vehicle — Monitoring High-Speed Motion"
+                "WALKING" -> "Walking — Normal Motion Active"
+                "RUNNING" -> "Running — Dynamic Activity Active"
+                else -> "Stationary — Normal Baseline"
             }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Stationary — Low Activity Baseline")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Stationary — Normal Baseline")
 
     // Adaptive threshold suggestion prompt state
     private val _suggestAdaptiveThreshold = MutableStateFlow(false)
@@ -92,6 +95,14 @@ class HomeViewModel @Inject constructor(
                 } else if (state is CountdownState.Activated) {
                     onCountdownExpired(state.triggerType)
                 }
+            }
+        }
+
+        // Verify real cryptographic hash-chain integrity periodically
+        viewModelScope.launch {
+            while (true) {
+                _isChainValid.value = repository.verifyBufferIntegrity(60)
+                delay(15000)
             }
         }
 
