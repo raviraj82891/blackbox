@@ -48,7 +48,10 @@ class ActivityRecognitionCollector(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     fun startTransitionUpdates(): Flow<ActivityReading> = callbackFlow {
-        val intent = Intent(ACTION_ACTIVITY_TRANSITION)
+        // Explicit Intent required on Android 14+ when using PendingIntent.FLAG_MUTABLE
+        val intent = Intent(ACTION_ACTIVITY_TRANSITION).apply {
+            setPackage(context.packageName)
+        }
         val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         } else {
