@@ -22,13 +22,13 @@ sealed class CountdownState {
  * Trigger Detector — On-device physics engine detecting severe crashes and falls.
  *
  * Fall Detection Physics (3-Stage Model):
- * 1. Free-Fall Weightlessness: Vector magnitude < 3.5 m/s² for 150-500ms.
+ * 1. Free-Fall Weightlessness: Vector magnitude < 3.5 m/s² for 150-600ms.
  * 2. Heavy Impact Spike: Vector magnitude > 25.0 m/s².
  * 3. Orientation Shift & Post-Fall Stillness.
  */
 class TriggerDetector {
 
-    var impactThresholdMs2: Double = 28.0
+    var impactThresholdMs2: Double = 25.0
     var gyroThresholdRad: Double = 2.5
     var postImpactStillnessWindowMs: Long = 20000L
 
@@ -38,6 +38,9 @@ class TriggerDetector {
     private var possibleImpactTimeMs: Long = 0L
     private var lastPeakMagnitude: Double = 0.0
 
+    // Latest gyroscopic rotation magnitude
+    private var latestGyroDelta: Float = 0f
+
     // Free-fall weightlessness tracking for 3-Stage Fall Detection
     private var freeFallStartTimeMs: Long = 0L
     private var isFreeFallDetected = false
@@ -46,7 +49,11 @@ class TriggerDetector {
     private var cancelledCountdownsInWindow = 0
     private var lastCancelledPeakMagnitude = 0.0
 
-    fun evaluateMotion(accelMagnitude: Float, gyroDelta: Float, timestampMs: Long): Boolean {
+    fun updateGyroscope(delta: Float) {
+        latestGyroDelta = delta
+    }
+
+    fun evaluateMotion(accelMagnitude: Float, timestampMs: Long): Boolean {
         if (_countdownState.value is CountdownState.ActiveCountdown || _countdownState.value is CountdownState.Activated) {
             return false
         }
@@ -66,8 +73,8 @@ class TriggerDetector {
             }
         }
 
-        // Stage 2: Heavy Impact Spike
-        if (accelMagnitude > impactThresholdMs2 && gyroDelta > gyroThresholdRad) {
+        // Stage 2: Heavy Impact Spike (> impactThresholdMs2)
+        if (accelMagnitude > impactThresholdMs2) {
             possibleImpactTimeMs = timestampMs
             lastPeakMagnitude = accelMagnitude.toDouble()
 

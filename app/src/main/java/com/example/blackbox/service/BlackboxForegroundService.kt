@@ -20,6 +20,7 @@ import com.example.blackbox.domain.trigger.TriggerDetector
 import com.example.blackbox.sensor.ActivityRecognitionCollector
 import com.example.blackbox.sensor.AudioClassifierCollector
 import com.example.blackbox.sensor.BatteryCollector
+import com.example.blackbox.sensor.BatteryReading
 import com.example.blackbox.sensor.LocationCollector
 import com.example.blackbox.sensor.SensorCollector
 import com.example.blackbox.sensor.UserActivityState
@@ -96,8 +97,8 @@ class BlackboxForegroundService : Service() {
                 )
                 repository.recordSensorEvent(EventType.ACCEL, payload, reading.timestampMs)
 
-                // Feed into trigger detector
-                triggerDetector.evaluateMotion(reading.magnitude, 0f, reading.timestampMs)
+                // Feed into physics trigger detector
+                triggerDetector.evaluateMotion(reading.magnitude, reading.timestampMs)
             }
         }
 
@@ -109,6 +110,9 @@ class BlackboxForegroundService : Service() {
                     reading.x, reading.y, reading.z, reading.deltaMagnitude
                 )
                 repository.recordSensorEvent(EventType.GYRO, payload, reading.timestampMs)
+
+                // Update latest gyroscopic rotation magnitude
+                triggerDetector.updateGyroscope(reading.deltaMagnitude)
             }
         }
 
@@ -158,12 +162,16 @@ class BlackboxForegroundService : Service() {
         serviceScope.launch {
             val bat = batteryCollector.getBatteryStatus()
             val batPayload = """{"level":${bat.levelPercentage},"isCharging":${bat.isCharging}}"""
-            repository.recordSensorEvent(EventType.BATTERY, batPayload, bat.timestampMs)
+            repoPayload(batPayload, bat)
 
             val wifi = wifiCollector.captureSnapshot()
             val wifiPayload = """{"ssid":"${wifi.connectedSsid ?: ""}","signalDbm":${wifi.signalLevelDbm},"accessPoints":${wifi.nearbyAccessPointCount}}"""
             repository.recordSensorEvent(EventType.WIFI, wifiPayload, wifi.timestampMs)
         }
+    }
+
+    private suspend fun repoPayload(batPayload: String, bat: BatteryReading) {
+        repository.recordSensorEvent(EventType.BATTERY, batPayload, bat.timestampMs)
     }
 
     private fun restartLocationSampling(locationCollector: LocationCollector, isMoving: Boolean) {
