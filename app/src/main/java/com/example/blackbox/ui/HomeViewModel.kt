@@ -84,7 +84,12 @@ class HomeViewModel @Inject constructor(
     private val _suggestAdaptiveThreshold = MutableStateFlow(false)
     val suggestAdaptiveThreshold: StateFlow<Boolean> = _suggestAdaptiveThreshold.asStateFlow()
 
+    // Solo Walk Safety Check-In Timer state
+    private val _safetyTimerSeconds = MutableStateFlow<Int?>(null)
+    val safetyTimerSeconds: StateFlow<Int?> = _safetyTimerSeconds.asStateFlow()
+
     private var countdownTimerJob: Job? = null
+    private var safetyCheckInJob: Job? = null
 
     init {
         // Observe countdown state
@@ -126,6 +131,29 @@ class HomeViewModel @Inject constructor(
                 triggerDetector.updateCountdown(left)
             }
         }
+    }
+
+    fun startSafetyCheckInTimer(minutes: Int) {
+        safetyCheckInJob?.cancel()
+        _safetyTimerSeconds.value = minutes * 60
+
+        safetyCheckInJob = viewModelScope.launch {
+            while ((_safetyTimerSeconds.value ?: 0) > 0) {
+                delay(1000)
+                val current = _safetyTimerSeconds.value ?: 0
+                val next = current - 1
+                _safetyTimerSeconds.value = next
+                if (next <= 0) {
+                    triggerManualSos()
+                    _safetyTimerSeconds.value = null
+                }
+            }
+        }
+    }
+
+    fun cancelSafetyCheckInTimer() {
+        safetyCheckInJob?.cancel()
+        _safetyTimerSeconds.value = null
     }
 
     fun cancelCountdown() {

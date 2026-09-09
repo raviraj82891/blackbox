@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -52,12 +53,15 @@ fun HomeScreen(
     situationalStatus: String,
     countdownState: CountdownState,
     suggestAdaptiveThreshold: Boolean,
+    safetyTimerSeconds: Int?,
     onPauseResumeClicked: () -> Unit,
     onWipeDataClicked: () -> Unit,
     onManualSosClicked: () -> Unit,
     onCancelCountdownClicked: () -> Unit,
     onApplyAdaptiveThreshold: () -> Unit,
     onDismissAdaptivePrompt: () -> Unit,
+    onStartSafetyTimer: (Int) -> Unit,
+    onCancelSafetyTimer: () -> Unit,
     onNavigateToContacts: () -> Unit
 ) {
     var showWipeConfirmation by remember { mutableStateOf(false) }
@@ -189,6 +193,62 @@ fun HomeScreen(
                     }
                 }
 
+                // Feature E: Safety Check-In Timer Card
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = CardWhite),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Timer, contentDescription = null, tint = SoftTeal)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Solo Walk Safety Check-In Timer", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        if (safetyTimerSeconds != null) {
+                            val mins = safetyTimerSeconds / 60
+                            val secs = safetyTimerSeconds % 60
+                            Text(
+                                text = "Check-In Timer Active: %02d:%02d remaining".format(mins, secs),
+                                fontWeight = FontWeight.Bold,
+                                color = WarmCoral,
+                                fontSize = 16.sp
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Button(
+                                onClick = onCancelSafetyTimer,
+                                colors = ButtonDefaults.buttonColors(containerColor = Mint),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().height(44.dp)
+                            ) {
+                                Text("I'm Safe — Cancel Timer", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Text("Set a timer when walking alone at night. If you don't check in before it expires, TRACE alerts your contacts.", style = MaterialTheme.typography.bodySmall, color = MutedSlate)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(onClick = { onStartSafetyTimer(15) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = SoftBlueContainer)) {
+                                    Text("15 Min", color = DarkTeal, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                                Button(onClick = { onStartSafetyTimer(30) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = SoftBlueContainer)) {
+                                    Text("30 Min", color = DarkTeal, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                                Button(onClick = { onStartSafetyTimer(60) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = SoftBlueContainer)) {
+                                    Text("60 Min", color = DarkTeal, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Adaptive Threshold Suggestion Card
                 if (suggestAdaptiveThreshold) {
                     Card(
@@ -206,7 +266,7 @@ fun HomeScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Frequent cancellations detected. Would you like to automatically raise sensitivity threshold to avoid false alarms?",
+                                text = "You've cancelled a few alerts during normal motion. Would you like to raise the crash sensitivity threshold to avoid false alarms?",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MutedSlate
                             )
@@ -217,7 +277,7 @@ fun HomeScreen(
                                     shape = RoundedCornerShape(12.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = SoftTeal)
                                 ) {
-                                    Text("Raise Threshold", color = Color.White)
+                                    Text("Raise Sensitivity Threshold", color = Color.White)
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
                                 TextButton(onClick = onDismissAdaptivePrompt) {

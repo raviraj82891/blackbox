@@ -18,6 +18,14 @@ sealed class CountdownState {
     object Cancelled : CountdownState()
 }
 
+/**
+ * Trigger Detector — On-device physics engine detecting severe crashes and falls.
+ *
+ * Fall Detection Physics (3-Stage Model):
+ * 1. Free-Fall Weightlessness: Vector magnitude < 3.5 m/s² for 150-500ms.
+ * 2. Heavy Impact Spike: Vector magnitude > 25.0 m/s².
+ * 3. Orientation Shift & Post-Fall Stillness.
+ */
 class TriggerDetector {
 
     var impactThresholdMs2: Double = 28.0
@@ -30,6 +38,10 @@ class TriggerDetector {
     private var possibleImpactTimeMs: Long = 0L
     private var lastPeakMagnitude: Double = 0.0
 
+    // Free-fall weightlessness tracking for 3-Stage Fall Detection
+    private var freeFallStartTimeMs: Long = 0L
+    private var isFreeFallDetected = false
+
     // Adaptive sensitivity calibration counter
     private var cancelledCountdownsInWindow = 0
     private var lastCancelledPeakMagnitude = 0.0
@@ -39,11 +51,38 @@ class TriggerDetector {
             return false
         }
 
+        // Stage 1: Detect free-fall weightlessness (< 3.5 m/s²)
+        if (accelMagnitude < 3.5f) {
+            if (freeFallStartTimeMs == 0L) {
+                freeFallStartTimeMs = timestampMs
+            } else if (timestampMs - freeFallStartTimeMs in 150..600) {
+                isFreeFallDetected = true
+            }
+        } else if (accelMagnitude > 12.0f) {
+            // Reset free-fall window if normal motion resumes without impact
+            if (timestampMs - freeFallStartTimeMs > 800) {
+                isFreeFallDetected = false
+                freeFallStartTimeMs = 0L
+            }
+        }
+
+        // Stage 2: Heavy Impact Spike
         if (accelMagnitude > impactThresholdMs2 && gyroDelta > gyroThresholdRad) {
             possibleImpactTimeMs = timestampMs
             lastPeakMagnitude = accelMagnitude.toDouble()
+
+            // Classify as AUTO_FALL if preceded by free-fall weightlessness within 1.5s
+            val triggerType = if (isFreeFallDetected && (timestampMs - freeFallStartTimeMs) <= 1500) {
+                TriggerType.AUTO_FALL
+            } else {
+                TriggerType.AUTO_CRASH
+            }
+
+            isFreeFallDetected = false
+            freeFallStartTimeMs = 0L
+
             // 30-second confirmation for automatic crash/fall detection
-            startCountdown(TriggerType.AUTO_CRASH, lastPeakMagnitude, durationSeconds = 30)
+            startCountdown(triggerType, lastPeakMagnitude, durationSeconds = 30)
             return true
         }
         return false

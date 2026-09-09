@@ -109,6 +109,7 @@ fun BlackboxNavHost(
                 val sparklinePoints by viewModel.sparklinePoints.collectAsState()
                 val situationalStatus by viewModel.situationalStatus.collectAsState()
                 val suggestAdaptiveThreshold by viewModel.suggestAdaptiveThreshold.collectAsState()
+                val safetyTimerSeconds by viewModel.safetyTimerSeconds.collectAsState()
 
                 HomeScreen(
                     isServiceRunning = isServiceRunning,
@@ -120,6 +121,7 @@ fun BlackboxNavHost(
                     situationalStatus = situationalStatus,
                     countdownState = countdownState,
                     suggestAdaptiveThreshold = suggestAdaptiveThreshold,
+                    safetyTimerSeconds = safetyTimerSeconds,
                     onPauseResumeClicked = {
                         if (isServiceRunning) viewModel.pauseProtectionService() else viewModel.resumeProtectionService()
                     },
@@ -128,6 +130,8 @@ fun BlackboxNavHost(
                     onCancelCountdownClicked = { viewModel.cancelCountdown() },
                     onApplyAdaptiveThreshold = { viewModel.applyAdaptiveThreshold() },
                     onDismissAdaptivePrompt = { viewModel.dismissAdaptivePrompt() },
+                    onStartSafetyTimer = { mins -> viewModel.startSafetyCheckInTimer(mins) },
+                    onCancelSafetyTimer = { viewModel.cancelSafetyCheckInTimer() },
                     onNavigateToContacts = { navController.navigate(Screen.Contacts.route) }
                 )
             }
