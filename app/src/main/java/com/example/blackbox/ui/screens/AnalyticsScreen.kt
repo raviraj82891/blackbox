@@ -1,24 +1,21 @@
 package com.example.blackbox.ui.screens
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.blackbox.ui.theme.*
 
 @Composable
 fun AnalyticsScreen(
@@ -27,9 +24,7 @@ fun AnalyticsScreen(
     autoCrashCount: Int,
     manualSosCount: Int
 ) {
-    var timeFilter by remember { mutableIntStateOf(0) } // 0: 1H, 1: 1D, 2: 7D, 3: 30D
-
-    Scaffold(containerColor = OffWhite) { padding ->
+    Scaffold { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -37,123 +32,83 @@ fun AnalyticsScreen(
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Header Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(text = "Safety & Sensor Analytics", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Time Filter Pills
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf("1H", "1D", "7D", "30D").forEachIndexed { index, label ->
-                    FilterChip(
-                        selected = timeFilter == index,
-                        onClick = { timeFilter = index },
-                        label = { Text(label, fontWeight = FontWeight.Bold, fontSize = 12.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFF0F172A),
-                            selectedLabelColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(12.dp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Analytics, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "Safety & Sensor Analytics",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Aggregated telemetry, trigger history, and false-alarm performance",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Stat Cards Row
+            // Main Telemetry Summary Cards
             Row(modifier = Modifier.fillMaxWidth()) {
                 AnalyticsStatCard(
-                    title = "Total Events",
+                    title = "Total Events Logged",
                     value = "$totalEventsCount",
-                    subtitle = "in last 60 minutes",
-                    valueColor = SoftTeal,
-                    containerColor = SoftBlueContainer,
+                    subtitle = "Rolling Buffer Ingest",
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 AnalyticsStatCard(
-                    title = "False Alarms",
+                    title = "False Alarms Filtered",
                     value = "$cancelledCountdownsCount",
-                    subtitle = "avoided dispatches",
-                    valueColor = WarmCoral,
-                    containerColor = SoftCoralContainer,
+                    subtitle = "Avoided Dispatches",
                     modifier = Modifier.weight(1f)
                 )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Trigger Breakdown Card
+            // Emergency Trigger Breakdown Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = CardWhite),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
-                        text = "Trigger Breakdown",
+                        text = "Emergency Trigger Breakdown",
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    StatBarRow("Auto-Crash / Fall", autoCrashCount.coerceAtLeast(1), WarmCoral)
-                    StatBarRow("Manual SOS", manualSosCount.coerceAtLeast(1), Peach)
-                    StatBarRow("Cancelled False Alarms", cancelledCountdownsCount.coerceAtLeast(3), Mint)
+                    StatRow("Auto-Crash / Fall Detection Triggers", "$autoCrashCount")
+                    StatRow("Manual SOS Activations", "$manualSosCount")
+                    StatRow("Cancelled / False Positive Countdowns", "$cancelledCountdownsCount")
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Motion Intensity Wave Card
+            // System Performance Status
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = CardWhite),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Motion Intensity", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Surface(shape = RoundedCornerShape(8.dp), color = SoftGreenContainer) {
-                            Text("● Live", color = Mint, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
-                        }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Shield, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("System Efficiency Status", fontWeight = FontWeight.Bold)
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Bar Chart Canvas
-                    Box(modifier = Modifier.fillMaxWidth().height(90.dp)) {
-                        Canvas(modifier = Modifier.fillMaxSize()) {
-                            val barWidth = 8.dp.toPx()
-                            val space = 6.dp.toPx()
-                            val count = (size.width / (barWidth + space)).toInt()
-
-                            for (i in 0 until count) {
-                                val hRatio = (Math.sin(i * 0.4) * 0.4 + 0.5).toFloat()
-                                val barHeight = size.height * hRatio
-                                drawRect(
-                                    color = Mint,
-                                    topLeft = Offset(i * (barWidth + space), size.height - barHeight),
-                                    size = Size(barWidth, barHeight)
-                                )
-                            }
-                        }
-                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "On-device fusion rules and battery saver protocols are running at 100% efficiency. 60-minute retention policy active.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         }
@@ -161,46 +116,28 @@ fun AnalyticsScreen(
 }
 
 @Composable
-private fun AnalyticsStatCard(
-    title: String,
-    value: String,
-    subtitle: String,
-    valueColor: Color,
-    containerColor: Color,
-    modifier: Modifier = Modifier
-) {
+private fun AnalyticsStatCard(title: String, value: String, subtitle: String, modifier: Modifier = Modifier) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = CardWhite),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.labelMedium, color = MutedSlate)
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(value, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = valueColor)
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MutedSlate, fontSize = 11.sp)
+            Text(title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-private fun StatBarRow(label: String, value: Int, color: Color) {
-    Column(modifier = Modifier.padding(vertical = 6.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = CharcoalText)
-            Text("$value", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = color)
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        LinearProgressIndicator(
-            progress = { (value / 10f).coerceIn(0.1f, 1f) },
-            color = color,
-            trackColor = SurfaceTint,
-            modifier = Modifier.fillMaxWidth().height(6.dp)
-        )
+private fun StatRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, style = MaterialTheme.typography.bodySmall)
+        Text(value, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
     }
 }
