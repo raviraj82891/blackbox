@@ -16,7 +16,6 @@ import java.security.Signature
 import java.security.spec.X509EncodedKeySpec
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
@@ -48,6 +47,17 @@ class KeyManagementService(private val context: Context) {
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
+    }
+
+    /**
+     * Permanent storage for onboarding completion status.
+     */
+    fun isOnboardingCompleted(): Boolean {
+        return encryptedPrefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
+    }
+
+    fun setOnboardingCompleted(completed: Boolean) {
+        encryptedPrefs.edit().putBoolean(KEY_ONBOARDING_COMPLETED, completed).apply()
     }
 
     /**
@@ -173,6 +183,7 @@ class KeyManagementService(private val context: Context) {
     }
 
     companion object {
+        private const val KEY_ONBOARDING_COMPLETED = "key_onboarding_completed"
         private const val KEY_DB_PASSPHRASE = "key_db_passphrase"
         private const val KEY_ALIAS_ASYMMETRIC = "trace_asymmetric_key"
 

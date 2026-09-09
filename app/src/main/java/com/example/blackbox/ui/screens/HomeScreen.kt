@@ -17,10 +17,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,11 +33,13 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.blackbox.domain.trigger.CountdownState
+import com.example.blackbox.ui.theme.*
 
 @Composable
 fun HomeScreen(
@@ -57,10 +62,10 @@ fun HomeScreen(
 ) {
     var showWipeConfirmation by remember { mutableStateOf(false) }
 
-    // Pulse animation for hash-chain status
+    // Subtle pulse animation
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
+        initialValue = 0.4f,
         targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
             animation = tween(1200),
@@ -69,7 +74,7 @@ fun HomeScreen(
         label = "alpha"
     )
 
-    Scaffold { padding ->
+    Scaffold(containerColor = OffWhite) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -82,46 +87,78 @@ fun HomeScreen(
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Top Header Row with TRACE Title & Alert Bell
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Mint,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Shield, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(text = "TRACE", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                    }
 
-                // SECTION 5: Single most prominent card if NO emergency contact is saved
+                    Surface(
+                        shape = CircleShape,
+                        color = SoftCoralContainer,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Notifications, contentDescription = null, tint = WarmCoral, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
+
+                // Add Emergency Contact Prompt (if 0 contacts saved)
                 if (savedContactCount == 0) {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = 16.dp),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = SoftCoralContainer)
                     ) {
                         Column(modifier = Modifier.padding(20.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     Icons.Default.PersonAdd,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    tint = WarmCoral,
                                     modifier = Modifier.size(28.dp)
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    text = "To Complete Setup: Add an Emergency Contact",
+                                    text = "Complete Your Setup",
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                    color = CharcoalText
                                 )
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Black Box is recording your safety buffer, but cannot notify anyone if an emergency occurs until you save at least one contact.",
+                                text = "TRACE needs at least one emergency contact to notify if an accident occurs.",
                                 fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f)
+                                color = MutedSlate
                             )
                             Spacer(modifier = Modifier.height(14.dp))
                             Button(
                                 onClick = onNavigateToContacts,
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = WarmCoral),
+                                shape = RoundedCornerShape(14.dp),
                                 modifier = Modifier.fillMaxWidth().height(48.dp)
                             ) {
-                                Text("Add Emergency Contact Now", fontWeight = FontWeight.Bold)
+                                Text("Add Emergency Contact", fontWeight = FontWeight.Bold, color = Color.White)
                             }
                         }
                     }
@@ -132,9 +169,9 @@ fun HomeScreen(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 12.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color(0xFF78350F)
+                            .padding(bottom = 14.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        color = Peach
                     ) {
                         Row(
                             modifier = Modifier.padding(14.dp),
@@ -143,7 +180,7 @@ fun HomeScreen(
                             Icon(Icons.Default.BatteryAlert, contentDescription = null, tint = Color.White)
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "Power Saver Active (<15% Battery): Reduced audio classification to preserve emergency power.",
+                                text = "Power Saver Active (<15% Battery): Audio classification paused to preserve emergency power.",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -157,28 +194,30 @@ fun HomeScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 12.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                            .padding(bottom = 14.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = SoftBlueContainer)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(
-                                text = "Adjust Sensitivity?",
+                                text = "Adjust Crash Sensitivity?",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "You've cancelled a few alerts during normal motion. Would you like to raise the crash sensitivity threshold to avoid false alarms?",
-                                style = MaterialTheme.typography.bodySmall
+                                text = "Frequent cancellations detected. Would you like to automatically raise sensitivity threshold to avoid false alarms?",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MutedSlate
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Row {
                                 Button(
                                     onClick = onApplyAdaptiveThreshold,
-                                    shape = RoundedCornerShape(8.dp)
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = SoftTeal)
                                 ) {
-                                    Text("Raise Sensitivity Threshold")
+                                    Text("Raise Threshold", color = Color.White)
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
                                 TextButton(onClick = onDismissAdaptivePrompt) {
@@ -189,13 +228,14 @@ fun HomeScreen(
                     }
                 }
 
-                // Main Reassuring Status Card
+                // Main Reassuring Protection Status Card (Mint/Teal Container)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(28.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (isServiceRunning && savedContactCount > 0) Color(0xFF0F172A) else Color(0xFF334155)
-                    )
+                        containerColor = if (isServiceRunning && savedContactCount > 0) SoftGreenContainer else SoftOrangeContainer
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Column(
                         modifier = Modifier
@@ -203,102 +243,165 @@ fun HomeScreen(
                             .fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            shape = CircleShape,
+                            color = if (isServiceRunning && savedContactCount > 0) Mint else Peach,
+                            modifier = Modifier.size(56.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(12.dp)
-                                    .alpha(if (isServiceRunning) pulseAlpha else 1f)
-                                    .background(
-                                        color = if (isServiceRunning && savedContactCount > 0) Color(0xFF22C55E) else Color(0xFFF59E0B),
-                                        shape = CircleShape
-                                    )
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (isServiceRunning && savedContactCount > 0) "Protection Active — Recording Your Last Hour" else if (isServiceRunning) "Protection Active (Contact Setup Needed)" else "Protection Paused",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         Text(
-                            text = situationalStatus,
-                            color = Color.White.copy(alpha = 0.9f),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            textAlign = TextAlign.Center
+                            text = if (isServiceRunning && savedContactCount > 0) "Protection Active" else if (isServiceRunning) "Protection Active (Contact Setup Needed)" else "Protection Paused",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = CharcoalText
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = "Recording your safety buffer",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MutedSlate
                         )
                     }
                 }
 
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 3 Context Badges (Motion | Location | Battery/Contacts)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    ContextBadge(
+                        title = "Motion",
+                        status = "Normal",
+                        icon = Icons.Default.Speed,
+                        containerColor = SoftGreenContainer,
+                        iconColor = Mint,
+                        modifier = Modifier.weight(1f)
+                    )
+                    ContextBadge(
+                        title = "Location",
+                        status = "On",
+                        icon = Icons.Default.MyLocation,
+                        containerColor = SoftBlueContainer,
+                        iconColor = SoftTeal,
+                        modifier = Modifier.weight(1f)
+                    )
+                    ContextBadge(
+                        title = "Contacts",
+                        status = "$savedContactCount saved",
+                        icon = Icons.Default.Shield,
+                        containerColor = SoftOrangeContainer,
+                        iconColor = Peach,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Section 4: "Your Movement Right Now" Sparkline
-                Text(
-                    text = "Your Movement Right Now",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.Start)
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
+                // Live Motion Sparkline Card
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(100.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = CardWhite),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
-                    Box(modifier = Modifier.fillMaxSize().padding(12.dp)) {
-                        SparklineCanvas(points = sparklinePoints, modifier = Modifier.fillMaxSize())
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "Live Motion (Last 2 Minutes)",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Text(
+                                    text = situationalStatus,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MutedSlate
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .alpha(pulseAlpha)
+                                    .background(Mint, CircleShape)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(80.dp)
+                        ) {
+                            SparklineCanvas(points = sparklinePoints, modifier = Modifier.fillMaxSize())
+                        }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Section 4: "Protection Status"
-                Text(
-                    text = "Protection Status",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.Start)
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    MetricCard(
-                        title = "Buffered Log Events",
-                        value = "$bufferEventCount",
-                        subtitle = "Rolling 60 Minutes",
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    MetricCard(
-                        title = "Tamper Security",
-                        value = if (isChainValid) "SAFE" else "CHECK LOGS",
-                        subtitle = if (isChainValid) "Timeline Unmodified" else "Discrepancy",
-                        isSuccess = isChainValid,
-                        modifier = Modifier.weight(1f)
-                    )
+                // Prominent Warm Coral SOS Action Button
+                Button(
+                    onClick = onManualSosClicked,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(72.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = WarmCoral)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "SOS",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Hold for 3 seconds",
+                                fontSize = 12.sp,
+                                color = Color.White.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Quick Action Controls
+                // Quick Action Controls (Pause / Wipe)
                 Row(modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(
                         onClick = onPauseResumeClicked,
                         modifier = Modifier
                             .weight(1f)
-                            .height(50.dp),
-                        shape = RoundedCornerShape(12.dp)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(16.dp)
                     ) {
                         Icon(
                             imageVector = if (isServiceRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
@@ -314,9 +417,9 @@ fun HomeScreen(
                         onClick = { showWipeConfirmation = true },
                         modifier = Modifier
                             .weight(1f)
-                            .height(50.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = WarmCoral)
                     ) {
                         Icon(Icons.Default.Delete, contentDescription = null)
                         Spacer(modifier = Modifier.width(6.dp))
@@ -324,35 +427,10 @@ fun HomeScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(28.dp))
-
-                // Manual SOS Button
-                Button(
-                    onClick = onManualSosClicked,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(72.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
-                ) {
-                    Icon(
-                        Icons.Default.Warning,
-                        contentDescription = null,
-                        modifier = Modifier.size(32.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "MANUAL EMERGENCY SOS",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Black,
-                        color = Color.White
-                    )
-                }
-
                 Spacer(modifier = Modifier.height(20.dp))
             }
 
-            // Countdown Overlay
+            // Emergency Countdown Overlay
             AnimatedVisibility(
                 visible = countdownState is CountdownState.ActiveCountdown,
                 modifier = Modifier.align(Alignment.BottomCenter)
@@ -380,7 +458,7 @@ fun HomeScreen(
                         onWipeDataClicked()
                     }
                 ) {
-                    Text("Wipe Everything", color = MaterialTheme.colorScheme.error)
+                    Text("Wipe Everything", color = WarmCoral)
                 }
             },
             dismissButton = {
@@ -389,6 +467,41 @@ fun HomeScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun ContextBadge(
+    title: String,
+    status: String,
+    icon: ImageVector,
+    containerColor: Color,
+    iconColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = CardWhite),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = containerColor,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(20.dp))
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(title, style = MaterialTheme.typography.labelMedium, color = MutedSlate, fontSize = 11.sp)
+            Text(status, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        }
     }
 }
 
@@ -420,36 +533,9 @@ private fun SparklineCanvas(points: List<Float>, modifier: Modifier = Modifier) 
 
         drawPath(
             path = path,
-            color = Color(0xFF0284C7),
+            color = Mint,
             style = Stroke(width = 3.dp.toPx())
         )
-    }
-}
-
-@Composable
-private fun MetricCard(
-    title: String,
-    value: String,
-    subtitle: String,
-    isSuccess: Boolean = true,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                value,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = if (isSuccess) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error
-            )
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
     }
 }
 
@@ -463,8 +549,8 @@ private fun CountdownBanner(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = Color(0xFF7F1D1D),
+        shape = RoundedCornerShape(24.dp),
+        color = WarmCoral,
         tonalElevation = 8.dp
     ) {
         Column(
@@ -486,16 +572,17 @@ private fun CountdownBanner(
             )
             Text(
                 text = "Notifying emergency contacts in $secondsRemaining s...",
-                color = Color.White.copy(alpha = 0.8f),
+                color = Color.White.copy(alpha = 0.9f),
                 fontSize = 12.sp
             )
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = onCancelClicked,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(14.dp)
             ) {
-                Text("I'M OK — CANCEL SOS", color = Color(0xFF7F1D1D), fontWeight = FontWeight.Bold)
+                Text("I'M OK — CANCEL SOS", color = WarmCoral, fontWeight = FontWeight.Bold)
             }
         }
     }

@@ -1,6 +1,7 @@
 package com.example.blackbox.ui.screens
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,32 +14,40 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import com.example.blackbox.ui.theme.*
 
 @Composable
 fun OnboardingScreen(
     onGrantPermissionsAndStart: () -> Unit
 ) {
-    var onboardingStage by remember { mutableIntStateOf(0) } // 0: Vision & Privacy, 1: Walkthrough, 2: Staged Permissions
+    var stage by remember { mutableIntStateOf(0) } // 0: Splash, 1: Why TRACE, 2: How It Works, 3: Permissions
 
-    Scaffold { padding ->
+    Scaffold(containerColor = OffWhite) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -47,195 +56,332 @@ fun OnboardingScreen(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(10.dp))
-
-            when (onboardingStage) {
-                0 -> VisionAndPrivacyStage(onNextClicked = { onboardingStage = 1 })
-                1 -> WalkthroughStage(onNextClicked = { onboardingStage = 2 })
-                2 -> StagedPermissionsStage(onComplete = onGrantPermissionsAndStart)
+            when (stage) {
+                0 -> HeroSplashStage(onNext = { stage = 1 })
+                1 -> WhyTraceStage(onNext = { stage = 2 })
+                2 -> HowItWorksStage(onNext = { stage = 3 })
+                3 -> StagedPermissionsStage(onComplete = onGrantPermissionsAndStart)
             }
         }
     }
 }
 
 @Composable
-private fun VisionAndPrivacyStage(onNextClicked: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+private fun HeroSplashStage(onNext: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // TRACE Shield Header
         Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-            modifier = Modifier.padding(12.dp)
+            shape = CircleShape,
+            color = Mint,
+            modifier = Modifier.size(64.dp)
         ) {
-            Icon(
-                Icons.Default.Shield,
-                contentDescription = null,
-                modifier = Modifier
-                    .padding(24.dp)
-                    .size(56.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
+            Box(contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Shield, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
+            }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        Text(
-            text = "TRACE — Digital Black Box",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "If you're ever in a serious accident and can't explain what happened, TRACE already has the last 60 minutes recorded — automatically, safely, and only for you.",
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Text(text = "TRACE", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black)
+        Text(text = "Your Story. Protected.", style = MaterialTheme.typography.bodyMedium, color = MutedSlate)
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        PrivacyPrincipleCard(
-            title = "We throw away anything older than an hour",
-            description = "Your phone keeps a rolling 60-minute safety buffer. Older data is deleted permanently and automatically.",
-            icon = Icons.Default.Lock
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        PrivacyPrincipleCard(
-            title = "We never save what you actually say",
-            description = "Microphone sound is checked in RAM only to recognize loud acoustic impacts. Raw voice recordings are discarded immediately.",
-            icon = Icons.Default.Mic
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        PrivacyPrincipleCard(
-            title = "Only you choose who can read a report",
-            description = "Incident reports are encrypted on your phone. Cloud servers never hold your unencrypted data or keys.",
-            icon = Icons.Default.CheckCircle
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        PrivacyPrincipleCard(
-            title = "Nobody can quietly alter your timeline",
-            description = "Every log entry is cryptographically sealed so nobody can modify what happened after an incident.",
-            icon = Icons.Default.Shield
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(
-            onClick = onNextClicked,
+        // Hero Illustration Card
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp),
-            shape = RoundedCornerShape(16.dp)
+                .height(220.dp),
+            shape = RoundedCornerShape(28.dp)
         ) {
-            Text("See How It Works", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color(0xFF2DD4BF), Color(0xFF0F172A))
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Icon(Icons.Default.Shield, contentDescription = null, tint = Color.White, modifier = Modifier.size(56.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Peace of mind for a safer tomorrow.",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        fontSize = 18.sp
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Dark Pill Banner
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = Color(0xFF0F172A),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "A digital black box for your life.",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Automatically records. Protects your privacy. Stands with you when it matters.",
+                    color = Color.White.copy(alpha = 0.8f),
+                    textAlign = TextAlign.Center,
+                    fontSize = 13.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        Button(
+            onClick = onNext,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Mint)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Get Started", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(Icons.AutoMirrored.Filled.NavigateNext, contentDescription = null, tint = Color.White)
+            }
         }
     }
 }
 
 @Composable
-private fun WalkthroughStage(onNextClicked: () -> Unit) {
+private fun WhyTraceStage(onNext: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Spacer(modifier = Modifier.height(10.dp))
+
         Text(
-            text = "How TRACE Protects You",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
+            text = "Why TRACE?",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "Real protection. Real privacy.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MutedSlate
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        WalkthroughStepCard(
-            stepNumber = "1",
-            title = "Continuous Silent Protection",
-            description = "TRACE quietly monitors motion, location, and environmental status over a rolling 60-minute window."
+        PrivacyFeatureCard(
+            title = "Keeps only the last hour",
+            description = "Older data is deleted automatically.",
+            icon = Icons.Default.Schedule,
+            containerColor = SoftGreenContainer,
+            iconTint = Mint
         )
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        WalkthroughStepCard(
-            stepNumber = "2",
-            title = "Smart Incident Detection",
-            description = "If a crash or severe fall occurs, TRACE gives you 30 seconds to tap 'I'm OK' before help is called."
+        PrivacyFeatureCard(
+            title = "We never save what you say",
+            description = "Audio is analysed in real-time. No raw recordings are stored.",
+            icon = Icons.Default.Mic,
+            containerColor = SoftCoralContainer,
+            iconTint = WarmCoral
         )
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        WalkthroughStepCard(
-            stepNumber = "3",
-            title = "Instant Emergency Dispatch",
-            description = "If you don't cancel, your trusted contacts receive an encrypted timeline report and your exact location link."
+        PrivacyFeatureCard(
+            title = "You control who can access",
+            description = "Reports are encrypted. Only your trusted contacts can read them.",
+            icon = Icons.Default.Group,
+            containerColor = SoftBlueContainer,
+            iconTint = SoftTeal
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        PrivacyFeatureCard(
+            title = "Tamper-evident & trustworthy",
+            description = "Every event is cryptographically sealed for post-incident integrity verification.",
+            icon = Icons.Default.Shield,
+            containerColor = SoftOrangeContainer,
+            iconTint = Peach
         )
 
         Spacer(modifier = Modifier.height(32.dp))
 
         Button(
-            onClick = onNextClicked,
+            onClick = onNext,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp),
-            shape = RoundedCornerShape(16.dp)
+                .height(56.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Mint)
         ) {
-            Text("Set Up Permissions", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("See How It Works", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(Icons.AutoMirrored.Filled.NavigateNext, contentDescription = null, tint = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+private fun HowItWorksStage(onNext: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text(
+            text = "How TRACE Protects You",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        StepRowCard(
+            stepNumber = "1",
+            title = "Continuous Monitoring",
+            description = "Sensors quietly record motion, location and environment over a rolling 60-minute window.",
+            badgeColor = Mint
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        StepRowCard(
+            stepNumber = "2",
+            title = "Smart Detection",
+            description = "If a crash or severe fall occurs, you get 30 seconds to confirm you're OK.",
+            badgeColor = WarmCoral
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        StepRowCard(
+            stepNumber = "3",
+            title = "Emergency Dispatch",
+            description = "If not canceled, your trusted contacts receive an encrypted report and your location.",
+            badgeColor = SoftTeal
+        )
+
+        Spacer(modifier = Modifier.height(36.dp))
+
+        Button(
+            onClick = onNext,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Mint)
+        ) {
+            Text("Set Up Permissions", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
         }
     }
 }
 
 @Composable
 private fun StagedPermissionsStage(onComplete: () -> Unit) {
+    val context = LocalContext.current
     var step by remember { mutableIntStateOf(0) }
+
+    fun checkIsGranted(permission: String): Boolean {
+        return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+    }
+
+    LaunchedEffect(step) {
+        when (step) {
+            0 -> if (checkIsGranted(Manifest.permission.ACCESS_FINE_LOCATION)) step = 1
+            1 -> if (checkIsGranted(Manifest.permission.RECORD_AUDIO)) step = 2
+            2 -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (checkIsGranted(Manifest.permission.ACTIVITY_RECOGNITION)) step = 3 else Unit
+            } else {
+                step = 3
+            }
+            3 -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (checkIsGranted(Manifest.permission.POST_NOTIFICATIONS)) onComplete() else Unit
+            } else {
+                onComplete()
+            }
+        }
+    }
 
     val singlePermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) {
-        if (step < 3) {
-            step++
-        } else {
-            onComplete()
-        }
+        if (step < 3) step++ else onComplete()
     }
 
     val multiplePermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) {
-        if (step < 3) {
-            step++
-        } else {
-            onComplete()
-        }
+        if (step < 3) step++ else onComplete()
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // Stepper dots indicator (1/4 .. 4/4)
+        Row(
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 12.dp)
+        ) {
+            for (i in 0..3) {
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 4.dp)
+                        .size(if (i == step) 10.dp else 8.dp)
+                        .background(
+                            color = if (i == step) Mint else MutedSlate.copy(alpha = 0.3f),
+                            shape = CircleShape
+                        )
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("${step + 1}/4", style = MaterialTheme.typography.labelMedium, color = MutedSlate)
+        }
+
         Text(
-            text = "One-Time Permission Setup",
+            text = "Let's set up TRACE",
             style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
+            fontWeight = FontWeight.Bold
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
         Text(
-            text = "We explain every permission before asking so you know exactly why TRACE needs it.",
+            text = "We'll explain each permission so you know exactly why it's needed.",
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MutedSlate
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
         when (step) {
-            0 -> PermissionExplanationCard(
+            0 -> PermissionCard(
                 icon = Icons.Default.MyLocation,
                 title = "Location Permission",
-                explanation = "This lets TRACE record where an incident happened so emergency responders or family know where you are.",
+                explanation = "This helps TRACE record where an incident happens so emergency responders or family know where you are.",
+                bullets = listOf("Only stored on your device", "Used only for safety purposes", "Adaptive tracking to save battery"),
                 buttonText = "Grant Location Permission",
                 onRequest = {
                     multiplePermissionLauncher.launch(
@@ -246,33 +392,36 @@ private fun StagedPermissionsStage(onComplete: () -> Unit) {
                     )
                 }
             )
-            1 -> PermissionExplanationCard(
+            1 -> PermissionCard(
                 icon = Icons.Default.Mic,
                 title = "Microphone Permission",
-                explanation = "This allows on-device acoustic detection of sudden loud impacts. Raw voice recordings are NEVER saved.",
+                explanation = "This allows TRACE to know if an acoustic impact occurred during a crash. Raw audio is never stored.",
+                bullets = listOf("Analyzed frame-by-frame in RAM", "No raw voice recordings saved", "Zero audio cloud upload"),
                 buttonText = "Grant Microphone Permission",
                 onRequest = {
                     singlePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                 }
             )
-            2 -> PermissionExplanationCard(
+            2 -> PermissionCard(
                 icon = Icons.AutoMirrored.Filled.DirectionsWalk,
                 title = "Physical Activity Permission",
                 explanation = "This allows TRACE to know if you were walking, driving, or stationary prior to an emergency.",
+                bullets = listOf("Helps detect real incidents", "Improves timeline accuracy", "No fitness data shared"),
                 buttonText = "Grant Activity Permission",
                 onRequest = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         singlePermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
                     } else {
-                        step++
+                        step = 3
                     }
                 }
             )
-            3 -> PermissionExplanationCard(
+            3 -> PermissionCard(
                 icon = Icons.Default.Notifications,
                 title = "Notifications Permission",
-                explanation = "This shows a subtle background notification letting you know TRACE protection is active.",
-                buttonText = "Enable Notifications & Finish",
+                explanation = "This lets us show a subtle background notification so you know TRACE is active.",
+                bullets = listOf("Helps protection status", "Important safety alerts", "Instant SOS feedback"),
+                buttonText = "Enable Notifications",
                 onRequest = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         singlePermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -286,103 +435,132 @@ private fun StagedPermissionsStage(onComplete: () -> Unit) {
 }
 
 @Composable
-private fun PermissionExplanationCard(
+private fun PermissionCard(
     icon: ImageVector,
     title: String,
     explanation: String,
+    bullets: List<String>,
     buttonText: String,
     onRequest: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = CardWhite),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(explanation, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(modifier = Modifier.height(20.dp))
-            Button(
-                onClick = onRequest,
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(buttonText, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
-
-@Composable
-private fun WalkthroughStepCard(stepNumber: String, title: String, description: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-    ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(32.dp)
+                color = SoftGreenContainer,
+                modifier = Modifier.size(56.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(stepNumber, color = Color.White, fontWeight = FontWeight.Bold)
+                    Icon(icon, contentDescription = null, tint = Mint, modifier = Modifier.size(32.dp))
                 }
             }
-            Spacer(modifier = Modifier.width(14.dp))
-            Column {
-                Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(explanation, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, color = MutedSlate)
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            bullets.forEach { bullet ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Mint, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(bullet, style = MaterialTheme.typography.bodySmall, color = CharcoalText)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(
+                onClick = onRequest,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Mint)
+            ) {
+                Text(buttonText, fontWeight = FontWeight.Bold, color = Color.White)
             }
         }
     }
 }
 
 @Composable
-private fun PrivacyPrincipleCard(
+private fun StepRowCard(stepNumber: String, title: String, description: String, badgeColor: Color) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = CardWhite),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                shape = CircleShape,
+                color = badgeColor,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(stepNumber, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(description, style = MaterialTheme.typography.bodySmall, color = MutedSlate)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PrivacyFeatureCard(
     title: String,
     description: String,
-    icon: ImageVector
+    icon: ImageVector,
+    containerColor: Color,
+    iconTint: Color
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = CardWhite),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.Top
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .size(26.dp)
-                    .padding(top = 2.dp)
-            )
-            Spacer(modifier = Modifier.width(14.dp))
-            Column {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = containerColor,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(24.dp))
+                }
             }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(text = description, style = MaterialTheme.typography.bodySmall, color = MutedSlate)
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MutedSlate)
         }
     }
 }

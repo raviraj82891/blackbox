@@ -7,25 +7,37 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Cyan600,
-    secondary = Slate700,
-    background = Slate900,
-    surface = Slate800,
-    surfaceVariant = Slate700,
-    error = Red600,
+private val LightColorScheme = lightColorScheme(
+    primary = Mint,
     onPrimary = Color.White,
-    onBackground = Color.White,
-    onSurface = Color.White
+    primaryContainer = SoftGreenContainer,
+    onPrimaryContainer = DarkTeal,
+    secondary = SoftTeal,
+    onSecondary = Color.White,
+    secondaryContainer = SoftBlueContainer,
+    onSecondaryContainer = DarkTeal,
+    tertiary = WarmCoral,
+    onTertiary = Color.White,
+    tertiaryContainer = SoftCoralContainer,
+    background = OffWhite,
+    onBackground = CharcoalText,
+    surface = CardWhite,
+    onSurface = CharcoalText,
+    surfaceVariant = SurfaceTint,
+    onSurfaceVariant = MutedSlate,
+    error = WarmCoral,
+    onError = Color.White
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = Cyan600,
-    secondary = Slate700,
-    background = Color(0xFFF8FAFC),
-    surface = Color.White,
-    surfaceVariant = Color(0xFFF1F5F9),
-    error = Red600
+private val DarkColorScheme = darkColorScheme(
+    primary = Mint,
+    onPrimary = Color.White,
+    primaryContainer = DarkTeal,
+    secondary = SoftTeal,
+    background = Color(0xFF121212),
+    surface = Color(0xFF1E1E1E),
+    onSurface = Color.White,
+    error = WarmCoral
 )
 
 @Composable
@@ -37,6 +49,8 @@ fun BlackboxTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
+        typography = TRACETypography,
+        shapes = TRACEShapes,
         content = content
     )
 }

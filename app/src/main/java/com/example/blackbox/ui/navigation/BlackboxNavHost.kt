@@ -13,11 +13,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.blackbox.data.crypto.KeyManagementService
 import com.example.blackbox.data.db.TriggerType
 import com.example.blackbox.ui.*
 import com.example.blackbox.ui.screens.*
@@ -37,8 +39,12 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
 fun BlackboxNavHost(
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val kms = remember { KeyManagementService(context) }
     val navController = rememberNavController()
-    var isOnboardingCompleted by remember { mutableStateOf(false) }
+
+    // Read onboarding completion status permanently from EncryptedSharedPreferences
+    var isOnboardingCompleted by remember { mutableStateOf(kms.isOnboardingCompleted()) }
 
     val navItems = listOf(
         Screen.Home,
@@ -83,6 +89,7 @@ fun BlackboxNavHost(
             composable(Screen.Onboarding.route) {
                 OnboardingScreen(
                     onGrantPermissionsAndStart = {
+                        kms.setOnboardingCompleted(true)
                         isOnboardingCompleted = true
                         navController.navigate(Screen.Home.route) {
                             popUpTo(Screen.Onboarding.route) { inclusive = true }
