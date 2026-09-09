@@ -23,12 +23,12 @@ sealed class CountdownState {
  *
  * Fall Detection Physics (3-Stage Model):
  * 1. Free-Fall Weightlessness: Vector magnitude < 3.5 m/s² for 150-600ms.
- * 2. Heavy Impact Spike: Vector magnitude > 25.0 m/s².
+ * 2. Heavy Impact Spike: Vector magnitude > 20.0 m/s².
  * 3. Orientation Shift & Post-Fall Stillness.
  */
 class TriggerDetector {
 
-    var impactThresholdMs2: Double = 25.0
+    var impactThresholdMs2: Double = 20.0
     var gyroThresholdRad: Double = 2.5
     var postImpactStillnessWindowMs: Long = 20000L
 

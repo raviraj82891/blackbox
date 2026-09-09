@@ -36,7 +36,8 @@ class SensorCollector(context: Context) {
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }
 
-        sensorManager.registerListener(listener, accel, SensorManager.SENSOR_DELAY_NORMAL)
+        // Use SENSOR_DELAY_GAME (~20ms / 50Hz) for real-time impact spike & fall detection
+        sensorManager.registerListener(listener, accel, SensorManager.SENSOR_DELAY_GAME)
         awaitClose { sensorManager.unregisterListener(listener) }
     }
 
@@ -59,7 +60,7 @@ class SensorCollector(context: Context) {
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }
 
-        sensorManager.registerListener(listener, gyro, SensorManager.SENSOR_DELAY_NORMAL)
+        sensorManager.registerListener(listener, gyro, SensorManager.SENSOR_DELAY_GAME)
         awaitClose { sensorManager.unregisterListener(listener) }
     }
 }
