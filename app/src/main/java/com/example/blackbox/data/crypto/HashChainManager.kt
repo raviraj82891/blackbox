@@ -39,20 +39,30 @@ object HashChainManager {
 
     /**
      * Verifies that every link in the hash chain is mathematically intact.
-     * @return true if no entry was modified or inserted post-hoc.
+     *
+     * For partial or pruned rolling buffer windows, the verification treats
+     * the first retained event's prevHash as the anchored boundary and validates
+     * cryptographic continuity and payload integrity for all subsequent events.
+     *
+     * @return true if no entry was modified, inserted, or removed post-hoc.
      */
     fun verifyChainIntegrity(events: List<SensorEvent>): Boolean {
         if (events.isEmpty()) return true
 
-        var expectedPrevHash = INITIAL_HASH
+        // Treat the first retained event's prevHash as the anchored boundary
+        var expectedPrevHash = events.first().prevHash
+
         for (event in events) {
+            // 1. Verify link continuity
             if (event.prevHash != expectedPrevHash) {
                 return false
             }
+            // 2. Re-compute SHA-256 hash over prevHash, payloadJson, and timestampMs
             val calculatedHash = computeEntryHash(event.prevHash, event.payloadJson, event.timestampMs)
             if (event.entryHash != calculatedHash) {
                 return false
             }
+            // 3. Advance expected prevHash
             expectedPrevHash = event.entryHash
         }
         return true

@@ -41,7 +41,7 @@ fun TimelineScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Reassuring Plain-Language Banner (Section 4)
+            // Reassuring Cryptographic Buffer Integrity Banner
             Surface(
                 color = if (isChainValid) Color(0xFF065F46) else Color(0xFF991B1B),
                 modifier = Modifier.fillMaxWidth()
@@ -59,13 +59,13 @@ fun TimelineScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = if (isChainValid) "Your last hour is recorded safely and hasn't been tampered with" else "WARNING: Log Discrepancy Detected",
+                            text = if (isChainValid) "Buffer Integrity Verified — Cryptographic hash chain intact across all retained events" else "WARNING: Log Discrepancy Detected — Tampered or broken hash chain",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp
                         )
                         Text(
-                            text = "Every event is cryptographically sealed for post-hoc integrity verification",
+                            text = "Every retained event is cryptographically linked and validated back to the boundary anchor.",
                             color = Color.White.copy(alpha = 0.8f),
                             fontSize = 10.sp
                         )
