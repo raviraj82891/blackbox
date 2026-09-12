@@ -170,15 +170,10 @@ fun BlackboxNavHost(
 
             composable(Screen.Analytics.route) {
                 val viewModel: AnalyticsViewModel = hiltViewModel()
-                val totalEventsCount by viewModel.totalEventsCount.collectAsState()
-                val autoCrashCount by viewModel.autoCrashCount.collectAsState()
-                val manualSosCount by viewModel.manualSosCount.collectAsState()
+                val analyticsState by viewModel.analyticsState.collectAsState()
 
                 AnalyticsScreen(
-                    totalEventsCount = totalEventsCount,
-                    cancelledCountdownsCount = viewModel.triggerDetector.shouldSuggestThresholdAdjustment().let { 0 },
-                    autoCrashCount = autoCrashCount,
-                    manualSosCount = manualSosCount
+                    state = analyticsState
                 )
             }
 

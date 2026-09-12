@@ -61,6 +61,27 @@ class KeyManagementService(private val context: Context) {
     }
 
     /**
+     * Local Privacy-First Analytics Counter Storage.
+     */
+    fun getCancelledCountdownsCount(): Int {
+        return encryptedPrefs.getInt(KEY_CANCELLED_COUNTDOWNS, 0)
+    }
+
+    fun incrementCancelledCountdowns() {
+        val current = getCancelledCountdownsCount()
+        encryptedPrefs.edit().putInt(KEY_CANCELLED_COUNTDOWNS, current + 1).apply()
+    }
+
+    fun getSafetyCheckInCount(): Int {
+        return encryptedPrefs.getInt(KEY_SAFETY_CHECKIN_COUNT, 0)
+    }
+
+    fun incrementSafetyCheckInCount() {
+        val current = getSafetyCheckInCount()
+        encryptedPrefs.edit().putInt(KEY_SAFETY_CHECKIN_COUNT, current + 1).apply()
+    }
+
+    /**
      * Gets or generates the database encryption passphrase for SQLCipher.
      */
     fun getOrCreateDatabasePassphrase(): String {
@@ -186,6 +207,8 @@ class KeyManagementService(private val context: Context) {
         private const val KEY_ONBOARDING_COMPLETED = "key_onboarding_completed"
         private const val KEY_DB_PASSPHRASE = "key_db_passphrase"
         private const val KEY_ALIAS_ASYMMETRIC = "trace_asymmetric_key"
+        private const val KEY_CANCELLED_COUNTDOWNS = "key_cancelled_countdowns"
+        private const val KEY_SAFETY_CHECKIN_COUNT = "key_safety_checkin_count"
 
         private const val KEY_MEDICAL_BLOOD = "key_medical_blood"
         private const val KEY_MEDICAL_ALLERGIES = "key_medical_allergies"

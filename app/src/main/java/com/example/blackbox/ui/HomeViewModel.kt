@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.blackbox.data.crypto.KeyManagementService
 import com.example.blackbox.data.db.EventType
 import com.example.blackbox.data.db.TriggerType
 import com.example.blackbox.data.repository.BlackboxRepository
@@ -33,6 +34,7 @@ class HomeViewModel @Inject constructor(
     val triggerDetector: TriggerDetector
 ) : AndroidViewModel(application) {
 
+    private val kms = KeyManagementService(application)
     private val batteryCollector = BatteryCollector(application)
 
     private val _isServiceRunning = MutableStateFlow(true)
@@ -144,6 +146,7 @@ class HomeViewModel @Inject constructor(
                 val next = current - 1
                 _safetyTimerSeconds.value = next
                 if (next <= 0) {
+                    kms.incrementSafetyCheckInCount()
                     triggerManualSos()
                     _safetyTimerSeconds.value = null
                 }
@@ -158,6 +161,7 @@ class HomeViewModel @Inject constructor(
 
     fun cancelCountdown() {
         countdownTimerJob?.cancel()
+        kms.incrementCancelledCountdowns()
         triggerDetector.cancelCountdown()
         if (triggerDetector.shouldSuggestThresholdAdjustment()) {
             _suggestAdaptiveThreshold.value = true
