@@ -1,5 +1,8 @@
 package com.example.blackbox.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -14,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
@@ -35,12 +39,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.blackbox.domain.trigger.CountdownState
 import com.example.blackbox.ui.theme.*
+import com.example.blackbox.util.PermissionValidator
 
 @Composable
 fun HomeScreen(
@@ -64,7 +70,14 @@ fun HomeScreen(
     onCancelSafetyTimer: () -> Unit,
     onNavigateToContacts: () -> Unit
 ) {
+    val context = LocalContext.current
     var showWipeConfirmation by remember { mutableStateOf(false) }
+
+    // Preflight check for missing permissions
+    val missingPermissions = remember(isServiceRunning) {
+        PermissionValidator.getMissingRequiredPermissions(context)
+    }
+    val isProtectionLimited = missingPermissions.isNotEmpty()
 
     // Subtle pulse animation
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -288,12 +301,16 @@ fun HomeScreen(
                     }
                 }
 
-                // Main Reassuring Protection Status Card (Mint/Teal Container)
+                // Main Protection Status Card (Preflight Check Result)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(28.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (isServiceRunning && savedContactCount > 0) SoftGreenContainer else SoftOrangeContainer
+                        containerColor = when {
+                            isProtectionLimited -> SoftCoralContainer
+                            isServiceRunning && savedContactCount > 0 -> SoftGreenContainer
+                            else -> SoftOrangeContainer
+                        }
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
@@ -305,12 +322,16 @@ fun HomeScreen(
                     ) {
                         Surface(
                             shape = CircleShape,
-                            color = if (isServiceRunning && savedContactCount > 0) Mint else Peach,
+                            color = when {
+                                isProtectionLimited -> WarmCoral
+                                isServiceRunning && savedContactCount > 0 -> Mint
+                                else -> Peach
+                            },
                             modifier = Modifier.size(56.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    Icons.Default.CheckCircle,
+                                    imageVector = if (isProtectionLimited) Icons.Default.Warning else Icons.Default.CheckCircle,
                                     contentDescription = null,
                                     tint = Color.White,
                                     modifier = Modifier.size(32.dp)
@@ -321,7 +342,12 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(14.dp))
 
                         Text(
-                            text = if (isServiceRunning && savedContactCount > 0) "Protection Active" else if (isServiceRunning) "Protection Active (Contact Setup Needed)" else "Protection Paused",
+                            text = when {
+                                isProtectionLimited -> "Protection Limited"
+                                isServiceRunning && savedContactCount > 0 -> "Protection Active"
+                                isServiceRunning -> "Protection Active (Contact Setup Needed)"
+                                else -> "Protection Paused"
+                            },
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = CharcoalText
@@ -330,10 +356,32 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
-                            text = "Recording your safety buffer",
+                            text = if (isProtectionLimited)
+                                "Missing required permissions: ${missingPermissions.joinToString(", ")}"
+                            else
+                                "Recording your safety buffer",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MutedSlate
+                            textAlign = TextAlign.Center,
+                            color = if (isProtectionLimited) WarmCoral else MutedSlate
                         )
+
+                        if (isProtectionLimited) {
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Button(
+                                onClick = {
+                                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                        data = Uri.fromParts("package", context.packageName, null)
+                                    }
+                                    context.startActivity(intent)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = WarmCoral),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Fix Permissions in App Settings", fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
                     }
                 }
 
@@ -346,7 +394,7 @@ fun HomeScreen(
                 ) {
                     ContextBadge(
                         title = "Motion",
-                        status = "Normal",
+                        status = if (PermissionValidator.hasActivityPermission(context)) "Normal" else "Limited",
                         icon = Icons.Default.Speed,
                         containerColor = SoftGreenContainer,
                         iconColor = Mint,
@@ -354,10 +402,10 @@ fun HomeScreen(
                     )
                     ContextBadge(
                         title = "Location",
-                        status = "On",
+                        status = if (PermissionValidator.hasLocationPermission(context)) "On" else "Off",
                         icon = Icons.Default.MyLocation,
-                        containerColor = SoftBlueContainer,
-                        iconColor = SoftTeal,
+                        containerColor = if (PermissionValidator.hasLocationPermission(context)) SoftBlueContainer else SoftCoralContainer,
+                        iconColor = if (PermissionValidator.hasLocationPermission(context)) SoftTeal else WarmCoral,
                         modifier = Modifier.weight(1f)
                     )
                     ContextBadge(

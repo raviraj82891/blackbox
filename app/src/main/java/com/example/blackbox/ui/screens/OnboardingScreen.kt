@@ -1,8 +1,12 @@
 package com.example.blackbox.ui.screens
 
 import android.Manifest
+import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -23,6 +27,8 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
@@ -38,8 +44,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.blackbox.ui.theme.*
+import com.example.blackbox.util.PermissionValidator
+
+enum class PermissionStepStatus {
+    NOT_REQUESTED,
+    GRANTED,
+    DENIED,
+    PERMANENTLY_DENIED
+}
 
 @Composable
 fun OnboardingScreen(
@@ -304,39 +319,62 @@ private fun HowItWorksStage(onNext: () -> Unit) {
 @Composable
 private fun StagedPermissionsStage(onComplete: () -> Unit) {
     val context = LocalContext.current
+    val activity = context as? Activity
     var step by remember { mutableIntStateOf(0) }
 
-    fun checkIsGranted(permission: String): Boolean {
-        return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
-    }
+    var stepStatus by remember { mutableStateOf(PermissionStepStatus.NOT_REQUESTED) }
 
-    LaunchedEffect(step) {
-        when (step) {
-            0 -> if (checkIsGranted(Manifest.permission.ACCESS_FINE_LOCATION)) step = 1
-            1 -> if (checkIsGranted(Manifest.permission.RECORD_AUDIO)) step = 2
-            2 -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                if (checkIsGranted(Manifest.permission.ACTIVITY_RECOGNITION)) step = 3 else Unit
-            } else {
-                step = 3
-            }
-            3 -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                if (checkIsGranted(Manifest.permission.POST_NOTIFICATIONS)) onComplete() else Unit
-            } else {
-                onComplete()
-            }
+    // Synchronize current step status with actual permission state
+    fun syncCurrentStepStatus() {
+        val isGranted = when (step) {
+            0 -> PermissionValidator.hasLocationPermission(context)
+            1 -> PermissionValidator.hasMicPermission(context)
+            2 -> PermissionValidator.hasActivityPermission(context)
+            3 -> PermissionValidator.hasNotificationPermission(context)
+            else -> false
+        }
+        if (isGranted) {
+            stepStatus = PermissionStepStatus.GRANTED
         }
     }
 
-    val singlePermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) {
-        if (step < 3) step++ else onComplete()
+    LaunchedEffect(step) {
+        syncCurrentStepStatus()
     }
 
-    val multiplePermissionLauncher = rememberLauncherForActivityResult(
+    // Permission Launchers
+    val singleLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            stepStatus = PermissionStepStatus.GRANTED
+            if (step < 3) step++ else {
+                if (PermissionValidator.isAllRequiredGranted(context)) onComplete()
+            }
+        } else {
+            val perm = when (step) {
+                1 -> Manifest.permission.RECORD_AUDIO
+                2 -> Manifest.permission.ACTIVITY_RECOGNITION
+                3 -> Manifest.permission.POST_NOTIFICATIONS
+                else -> ""
+            }
+            val showRationale = activity != null && perm.isNotBlank() && ActivityCompat.shouldShowRequestPermissionRationale(activity, perm)
+            stepStatus = if (showRationale) PermissionStepStatus.DENIED else PermissionStepStatus.PERMANENTLY_DENIED
+        }
+    }
+
+    val multipleLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) {
-        if (step < 3) step++ else onComplete()
+    ) { map ->
+        val fine = map[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarse = map[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        if (fine || coarse) {
+            stepStatus = PermissionStepStatus.GRANTED
+            step = 1
+        } else {
+            val showRationale = activity != null && ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.ACCESS_FINE_LOCATION)
+            stepStatus = if (showRationale) PermissionStepStatus.DENIED else PermissionStepStatus.PERMANENTLY_DENIED
+        }
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -362,72 +400,92 @@ private fun StagedPermissionsStage(onComplete: () -> Unit) {
         }
 
         Text(
-            text = "Let's set up TRACE",
+            text = "Set Up Required Permissions",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
 
         Text(
-            text = "We'll explain each permission so you know exactly why it's needed.",
+            text = "Required permissions must be granted to activate TRACE safety monitoring.",
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
             color = MutedSlate
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         when (step) {
             0 -> PermissionCard(
                 icon = Icons.Default.MyLocation,
                 title = "Location Permission",
+                isRequired = true,
+                status = stepStatus,
                 explanation = "This helps TRACE record where an incident happens so emergency responders or family know where you are.",
-                bullets = listOf("Only stored on your device", "Used only for safety purposes", "Adaptive tracking to save battery"),
+                consequenceText = "Without location permission, TRACE cannot record GPS coordinates during a crash.",
+                bullets = listOf("Only stored locally on device", "Used only for safety dispatches", "Adaptive battery-friendly tracking"),
                 buttonText = "Grant Location Permission",
                 onRequest = {
-                    multiplePermissionLauncher.launch(
+                    multipleLauncher.launch(
                         arrayOf(
                             Manifest.permission.ACCESS_FINE_LOCATION,
                             Manifest.permission.ACCESS_COARSE_LOCATION
                         )
                     )
-                }
+                },
+                onNext = { step = 1 }
             )
             1 -> PermissionCard(
                 icon = Icons.Default.Mic,
                 title = "Microphone Permission",
+                isRequired = true,
+                status = stepStatus,
                 explanation = "This allows TRACE to know if an acoustic impact occurred during a crash. Raw audio is never stored.",
-                bullets = listOf("Analyzed frame-by-frame in RAM", "No raw voice recordings saved", "Zero audio cloud upload"),
+                consequenceText = "Without microphone permission, TRACE cannot classify loud acoustic impact events.",
+                bullets = listOf("Analyzed frame-by-frame in RAM", "No raw voice recordings saved", "Zero audio cloud uploads"),
                 buttonText = "Grant Microphone Permission",
                 onRequest = {
-                    singlePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                }
+                    singleLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                },
+                onNext = { step = 2 }
             )
             2 -> PermissionCard(
                 icon = Icons.AutoMirrored.Filled.DirectionsWalk,
                 title = "Physical Activity Permission",
+                isRequired = true,
+                status = stepStatus,
                 explanation = "This allows TRACE to know if you were walking, driving, or stationary prior to an emergency.",
-                bullets = listOf("Helps detect real incidents", "Improves timeline accuracy", "No fitness data shared"),
+                consequenceText = "Without activity permission, TRACE cannot detect motion transitions or auto-adjust location intervals.",
+                bullets = listOf("Helps detect real crash/fall incidents", "Improves timeline accuracy", "No fitness data shared"),
                 buttonText = "Grant Activity Permission",
                 onRequest = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        singlePermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+                        singleLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
                     } else {
+                        stepStatus = PermissionStepStatus.GRANTED
                         step = 3
                     }
-                }
+                },
+                onNext = { step = 3 }
             )
             3 -> PermissionCard(
                 icon = Icons.Default.Notifications,
                 title = "Notifications Permission",
+                isRequired = false,
+                status = stepStatus,
                 explanation = "This lets us show a subtle background notification so you know TRACE is active.",
-                bullets = listOf("Helps protection status", "Important safety alerts", "Instant SOS feedback"),
+                consequenceText = "Without notification permission, background status warnings won't appear in your shade.",
+                bullets = listOf("Shows active monitoring status", "Important safety alerts", "Instant SOS feedback"),
                 buttonText = "Enable Notifications",
                 onRequest = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        singlePermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        singleLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                     } else {
-                        onComplete()
+                        stepStatus = PermissionStepStatus.GRANTED
+                        if (PermissionValidator.isAllRequiredGranted(context)) onComplete()
                     }
+                },
+                onNext = {
+                    if (PermissionValidator.isAllRequiredGranted(context)) onComplete()
                 }
             )
         }
@@ -438,11 +496,17 @@ private fun StagedPermissionsStage(onComplete: () -> Unit) {
 private fun PermissionCard(
     icon: ImageVector,
     title: String,
+    isRequired: Boolean,
+    status: PermissionStepStatus,
     explanation: String,
+    consequenceText: String,
     bullets: List<String>,
     buttonText: String,
-    onRequest: () -> Unit
+    onRequest: () -> Unit,
+    onNext: () -> Unit
 ) {
+    val context = LocalContext.current
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
@@ -453,13 +517,55 @@ private fun PermissionCard(
             modifier = Modifier.padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isRequired) SoftCoralContainer else SoftBlueContainer
+                ) {
+                    Text(
+                        text = if (isRequired) "Required" else "Optional",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isRequired) WarmCoral else DarkTeal,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+
+                if (status == PermissionStepStatus.GRANTED) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = SoftGreenContainer
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Mint, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Granted", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Mint)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             Surface(
                 shape = CircleShape,
-                color = SoftGreenContainer,
+                color = if (status == PermissionStepStatus.GRANTED) SoftGreenContainer else SoftCoralContainer,
                 modifier = Modifier.size(56.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(icon, contentDescription = null, tint = Mint, modifier = Modifier.size(32.dp))
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (status == PermissionStepStatus.GRANTED) Mint else WarmCoral,
+                        modifier = Modifier.size(32.dp)
+                    )
                 }
             }
 
@@ -468,7 +574,26 @@ private fun PermissionCard(
             Spacer(modifier = Modifier.height(8.dp))
             Text(explanation, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, color = MutedSlate)
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Denied Consequence Warning Card
+            if (status == PermissionStepStatus.DENIED || status == PermissionStepStatus.PERMANENTLY_DENIED) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = SoftCoralContainer
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = WarmCoral, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(consequenceText, fontSize = 12.sp, color = CharcoalText, fontWeight = FontWeight.Medium)
+                    }
+                }
+                Spacer(modifier = Modifier.height(14.dp))
+            }
 
             bullets.forEach { bullet ->
                 Row(
@@ -483,17 +608,53 @@ private fun PermissionCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            Button(
-                onClick = onRequest,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Mint)
-            ) {
-                Text(buttonText, fontWeight = FontWeight.Bold, color = Color.White)
+            when (status) {
+                PermissionStepStatus.GRANTED -> {
+                    Button(
+                        onClick = onNext,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Mint)
+                    ) {
+                        Text("Continue", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+                PermissionStepStatus.PERMANENTLY_DENIED -> {
+                    Button(
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", context.packageName, null)
+                            }
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = WarmCoral)
+                    ) {
+                        Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Open App Settings", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+                else -> {
+                    Button(
+                        onClick = onRequest,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = WarmCoral)
+                    ) {
+                        Text(buttonText, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+
+                    if (!isRequired) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(onClick = onNext) {
+                            Text("Skip Optional Permission", color = MutedSlate)
+                        }
+                    }
+                }
             }
         }
     }

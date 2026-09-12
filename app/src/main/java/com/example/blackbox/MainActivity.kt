@@ -13,6 +13,7 @@ import com.example.blackbox.data.crypto.KeyManagementService
 import com.example.blackbox.service.BlackboxForegroundService
 import com.example.blackbox.ui.navigation.BlackboxNavHost
 import com.example.blackbox.ui.theme.BlackboxTheme
+import com.example.blackbox.util.PermissionValidator
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -21,9 +22,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Automatically launch background protection service if onboarding is completed
+        // Automatically launch background protection service if onboarding is completed AND all required permissions are granted
         val kms = KeyManagementService(this)
-        if (kms.isOnboardingCompleted()) {
+        if (kms.isOnboardingCompleted() && PermissionValidator.isAllRequiredGranted(this)) {
             val serviceIntent = Intent(this, BlackboxForegroundService::class.java)
             try {
                 ContextCompat.startForegroundService(this, serviceIntent)
