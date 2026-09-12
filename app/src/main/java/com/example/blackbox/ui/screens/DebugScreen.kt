@@ -6,6 +6,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -16,6 +17,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.blackbox.ui.theme.MutedSlate
+import com.example.blackbox.ui.theme.SoftBlueContainer
 
 @Composable
 fun DebugScreen(
@@ -31,7 +34,12 @@ fun DebugScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.BugReport, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
+                Icon(
+                    Icons.Default.BugReport,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
@@ -40,19 +48,49 @@ fun DebugScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Simulate incident triggers for live demonstration",
+                        text = "Debug build only • Simulated incident triggers for live demonstration",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // UI Label indicating simulated incidents do not represent real sensor data
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = SoftBlueContainer
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Notice: Simulated incidents generate synthetic test telemetry for demonstration purposes and do not represent real sensor hardware data.",
+                        fontSize = 12.sp,
+                        color = MutedSlate,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                )
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
@@ -88,7 +126,9 @@ fun DebugScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f))
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+                )
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(

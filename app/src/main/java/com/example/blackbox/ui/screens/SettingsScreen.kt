@@ -10,15 +10,18 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.blackbox.ui.theme.MutedSlate
+import com.example.blackbox.ui.theme.SoftBlueContainer
 
 @Composable
 fun SettingsScreen(
@@ -160,7 +163,7 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Advanced & Testing Tools Section (Section 3)
+            // Advanced & Testing Tools Section
             OutlinedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp)
@@ -188,6 +191,32 @@ fun SettingsScreen(
 
                     AnimatedVisibility(visible = showAdvancedTools) {
                         Column(modifier = Modifier.padding(top = 12.dp)) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                color = SoftBlueContainer
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Notice: Simulated incidents generate synthetic test telemetry for demonstration purposes and do not represent real sensor hardware data.",
+                                        fontSize = 11.sp,
+                                        color = MutedSlate
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
                             Text(
                                 text = "Use these tools to test emergency triggers without physically crashing your phone.",
                                 style = MaterialTheme.typography.bodySmall,

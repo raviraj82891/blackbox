@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.People
@@ -19,6 +20,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.blackbox.BuildConfig
 import com.example.blackbox.data.crypto.KeyManagementService
 import com.example.blackbox.data.db.TriggerType
 import com.example.blackbox.ui.*
@@ -33,6 +35,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object MedicalQr : Screen("medical_qr", "Medical ID", Icons.Default.MedicalServices)
     object Contacts : Screen("contacts", "Contacts", Icons.Default.People)
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
+    object Debug : Screen("debug", "Debug", Icons.Default.BugReport)
 }
 
 @Composable
@@ -46,15 +49,21 @@ fun BlackboxNavHost(
     // Read onboarding completion status permanently from EncryptedSharedPreferences
     var isOnboardingCompleted by remember { mutableStateOf(kms.isOnboardingCompleted()) }
 
-    val navItems = listOf(
-        Screen.Home,
-        Screen.Timeline,
-        Screen.Incidents,
-        Screen.Analytics,
-        Screen.MedicalQr,
-        Screen.Contacts,
-        Screen.Settings
-    )
+    // Conditionally expose Debug destination ONLY in debug builds (BuildConfig.DEBUG)
+    val navItems = remember {
+        buildList {
+            add(Screen.Home)
+            add(Screen.Timeline)
+            add(Screen.Incidents)
+            add(Screen.Analytics)
+            add(Screen.MedicalQr)
+            add(Screen.Contacts)
+            add(Screen.Settings)
+            if (BuildConfig.DEBUG) {
+                add(Screen.Debug)
+            }
+        }
+    }
 
     val currentBackStack by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStack?.destination?.route ?: Screen.Home.route
@@ -215,6 +224,20 @@ fun BlackboxNavHost(
                     },
                     onTestSosClicked = { homeViewModel.triggerManualSos() }
                 )
+            }
+
+            // Expose DebugScreen route ONLY in Debug builds
+            if (BuildConfig.DEBUG) {
+                composable(Screen.Debug.route) {
+                    val homeViewModel: HomeViewModel = hiltViewModel()
+
+                    DebugScreen(
+                        onSimulateCrashClicked = {
+                            homeViewModel.triggerDetector.startCountdown(TriggerType.SIMULATED, 34.7)
+                        },
+                        onManualSosClicked = { homeViewModel.triggerManualSos() }
+                    )
+                }
             }
         }
     }
