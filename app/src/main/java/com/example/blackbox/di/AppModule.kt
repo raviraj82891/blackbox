@@ -30,8 +30,8 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideAWSBackendApi(): AWSBackendApi {
-        return RetrofitClient.apiService
+    fun provideAWSBackendApi(keyManagementService: KeyManagementService): AWSBackendApi {
+        return RetrofitClient.createApiService(keyManagementService)
     }
 
     @Provides

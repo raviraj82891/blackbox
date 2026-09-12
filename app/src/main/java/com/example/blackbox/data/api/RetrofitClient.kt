@@ -1,36 +1,47 @@
 package com.example.blackbox.data.api
 
+import com.example.blackbox.BuildConfig
+import com.example.blackbox.data.crypto.KeyManagementService
 import okhttp3.CertificatePinner
 import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
 
-    private const val BASE_URL = "https://api.blackbox-safety.aws/v1/"
+    fun createOkHttpClient(
+        keyManagementService: KeyManagementService,
+        isDebug: Boolean = BuildConfig.DEBUG
+    ): OkHttpClient {
+        val certPinnerBuilder = CertificatePinner.Builder()
+        val certDomain = BuildConfig.CERT_PIN_DOMAIN
+        val certHash = BuildConfig.CERT_PIN_HASH
 
-    private val certificatePinner = CertificatePinner.Builder()
-        // Certificate pinning stub for AWS API Gateway SSL endpoint
-        .add("api.blackbox-safety.aws", "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
-        .build()
+        // Operational certificate pinning: enforces pinning only when valid domain and hash are configured
+        if (certDomain.isNotBlank() && certHash.isNotBlank() && !certHash.contains("AAAAA")) {
+            certPinnerBuilder.add(certDomain, certHash)
+        }
 
-    private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        return OkHttpClient.Builder()
+            .certificatePinner(certPinnerBuilder.build())
+            .addInterceptor(AuthInterceptor(keyManagementService))
+            .addInterceptor(EmergencyRetryInterceptor(maxRetries = 3, initialBackoffMs = 1000L))
+            .addInterceptor(SanitizedLoggingInterceptor(isDebug = isDebug))
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
     }
 
-    private val okHttpClient = OkHttpClient.Builder()
-        .certificatePinner(certificatePinner)
-        .addInterceptor(loggingInterceptor)
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .build()
-
-    val apiService: AWSBackendApi by lazy {
-        Retrofit.Builder()
-            .baseUrl(BASE_URL)
-            .client(okHttpClient)
+    fun createApiService(
+        keyManagementService: KeyManagementService,
+        baseUrl: String = BuildConfig.BASE_URL
+    ): AWSBackendApi {
+        val client = createOkHttpClient(keyManagementService)
+        return Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(AWSBackendApi::class.java)

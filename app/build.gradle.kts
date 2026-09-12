@@ -22,12 +22,20 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "BASE_URL", "\"https://api.blackbox-safety.aws/v1/\"")
+            buildConfigField("String", "CERT_PIN_DOMAIN", "\"api.blackbox-safety.aws\"")
+            buildConfigField("String", "CERT_PIN_HASH", "\"\"")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            buildConfigField("String", "BASE_URL", "\"https://api.blackbox-safety.aws/v1/\"")
+            buildConfigField("String", "CERT_PIN_DOMAIN", "\"api.blackbox-safety.aws\"")
+            buildConfigField("String", "CERT_PIN_HASH", "\"\"")
         }
     }
 

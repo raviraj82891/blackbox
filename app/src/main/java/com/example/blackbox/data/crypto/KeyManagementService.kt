@@ -29,7 +29,7 @@ data class MedicalIdData(
 
 /**
  * Key Management Service for client-side envelope encryption,
- * Android Keystore asymmetric digital signing, and encrypted Medical ID storage.
+ * Android Keystore asymmetric digital signing, session auth tokens, and encrypted Medical ID storage.
  */
 class KeyManagementService(private val context: Context) {
 
@@ -47,6 +47,21 @@ class KeyManagementService(private val context: Context) {
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
+    }
+
+    /**
+     * Session Auth Token Storage (EncryptedSharedPreferences).
+     */
+    fun getAuthToken(): String? {
+        return encryptedPrefs.getString(KEY_AUTH_TOKEN, null)
+    }
+
+    fun saveAuthToken(token: String) {
+        encryptedPrefs.edit().putString(KEY_AUTH_TOKEN, token).apply()
+    }
+
+    fun clearAuthSession() {
+        encryptedPrefs.edit().remove(KEY_AUTH_TOKEN).apply()
     }
 
     /**
@@ -204,6 +219,7 @@ class KeyManagementService(private val context: Context) {
     }
 
     companion object {
+        private const val KEY_AUTH_TOKEN = "key_auth_token"
         private const val KEY_ONBOARDING_COMPLETED = "key_onboarding_completed"
         private const val KEY_DB_PASSPHRASE = "key_db_passphrase"
         private const val KEY_ALIAS_ASYMMETRIC = "trace_asymmetric_key"
