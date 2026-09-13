@@ -2,26 +2,23 @@ package com.example.blackbox.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.DirectionsRun
-import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -29,70 +26,91 @@ import androidx.compose.ui.unit.sp
 import com.example.blackbox.domain.fusion.SeverityLevel
 import com.example.blackbox.domain.fusion.TimelineEntry
 import com.example.blackbox.domain.fusion.TimelineSession
+import com.example.blackbox.ui.designsystem.*
+import com.example.blackbox.ui.theme.*
 
 @Composable
 fun TimelineScreen(
     sessions: List<TimelineSession>,
-    isChainValid: Boolean
+    isChainValid: Boolean?
 ) {
-    Scaffold { padding ->
+    Scaffold(
+        containerColor = TraceCanvas,
+        topBar = {
+            TraceTopBar(
+                title = "TIMELINE",
+                subtitle = "ROLLING 60-MINUTE BUFFER"
+            )
+        }
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Reassuring Cryptographic Buffer Integrity Banner
+            // Buffer Integrity Status Row
+            val hasEvents = sessions.isNotEmpty()
+            val chainStatus = when {
+                !hasEvents -> "NO EVENTS YET"
+                isChainValid == true -> "VERIFIED"
+                isChainValid == false -> "WARNING"
+                else -> "CHECKING"
+            }
+            val chainColor = when {
+                !hasEvents -> TraceMuted
+                isChainValid == true -> TraceMintSuccess
+                isChainValid == false -> TraceRedCritical
+                else -> TraceAmberWarning
+            }
+
             Surface(
-                color = if (isChainValid) Color(0xFF065F46) else Color(0xFF991B1B),
-                modifier = Modifier.fillMaxWidth()
+                color = TraceSurface,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, TraceHairline, RectangleShape)
             ) {
                 Row(
-                    modifier = Modifier.padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Icon(
-                        imageVector = if (isChainValid) Icons.Default.CheckCircle else Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = if (isChainValid) "Buffer Integrity Verified — Cryptographic hash chain intact across all retained events" else "WARNING: Log Discrepancy Detected — Tampered or broken hash chain",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
+                            text = "BUFFER INTEGRITY",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TraceMuted,
+                            letterSpacing = 1.5.sp
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Every retained event is cryptographically linked and validated back to the boundary anchor.",
-                            color = Color.White.copy(alpha = 0.8f),
-                            fontSize = 10.sp
+                            text = when {
+                                !hasEvents -> "No telemetry events recorded in 60-min window"
+                                isChainValid == true -> "SHA-256 Chain Anchored & Verified"
+                                isChainValid == false -> "Integrity Warning — Chain Discrepancy"
+                                else -> "Checking Cryptographic Integrity..."
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TracePrimary
                         )
                     }
+                    TraceBadge(text = chainStatus, color = chainColor)
                 }
             }
+
+            TraceDivider()
 
             if (sessions.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Rolling 60m buffer collecting initial session activity...",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                TraceEmptyState(
+                    title = "NO RECENT EVENTS",
+                    description = "TRACE is continuously recording sensor telemetry over a rolling 60-minute window. Recorded motion, location, and acoustic events will appear here."
+                )
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    contentPadding = PaddingValues(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 64.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(sessions) { session ->
-                        TimelineSessionCard(session)
+                        TimelineSessionItem(session)
                     }
                 }
             }
@@ -101,104 +119,74 @@ fun TimelineScreen(
 }
 
 @Composable
-private fun TimelineSessionCard(session: TimelineSession) {
+private fun TimelineSessionItem(session: TimelineSession) {
     var expanded by remember { mutableStateOf(false) }
 
-    val activityIcon = when {
-        session.activityState.contains("VEHICLE", ignoreCase = true) -> Icons.Default.DirectionsCar
-        session.activityState.contains("RUNNING", ignoreCase = true) -> Icons.AutoMirrored.Filled.DirectionsRun
-        session.activityState.contains("WALKING", ignoreCase = true) -> Icons.AutoMirrored.Filled.DirectionsWalk
-        else -> Icons.Default.Person
-    }
-
-    val badgeColor = when (session.worstSeverity) {
-        SeverityLevel.CRITICAL -> Color(0xFFDC2626)
-        SeverityLevel.WARNING -> Color(0xFFD97706)
-        SeverityLevel.INFO -> Color(0xFF2563EB)
-    }
-
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { expanded = !expanded },
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .border(1.dp, TraceHairline, RectangleShape)
+            .clickable { expanded = !expanded }
+            .semantics {
+                contentDescription = "${session.activityState} session from ${session.formattedTimeRange}. Peak severity: ${session.worstSeverity.name}."
+            },
+        color = TraceSurface
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Session Header Row
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = CircleShape,
-                        color = badgeColor.copy(alpha = 0.15f),
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(activityIcon, contentDescription = null, tint = badgeColor, modifier = Modifier.size(22.dp))
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = "${session.activityState} Session",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "${session.formattedTimeRange} (${session.durationMinutes} mins)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                Column {
+                    Text(
+                        text = "${session.activityState} SESSION".uppercase(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TracePrimary,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${session.formattedTimeRange} (${session.durationMinutes} MIN)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TraceMuted
+                    )
                 }
 
-                Icon(
-                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TraceSeverityBadge(severity = session.worstSeverity)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        tint = TraceMuted,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            if (session.maxSpeedKmh > 0.0) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "MAX SPEED: %.1f KM/H".format(session.maxSpeedKmh),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TraceMuted
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = badgeColor.copy(alpha = 0.15f)
-                ) {
-                    Text(
-                        text = "Peak Event: ${session.worstSeverity.name}",
-                        color = badgeColor,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-
-                if (session.maxSpeedKmh > 0.0) {
-                    Text(
-                        text = "Max Speed: %.1f km/h".format(session.maxSpeedKmh),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.secondary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
+            // Expanded Chronological Event Nodes
             AnimatedVisibility(visible = expanded) {
-                Column(modifier = Modifier.padding(top = 14.dp)) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                    Spacer(modifier = Modifier.height(12.dp))
-                    session.entries.forEach { entry ->
-                        TimelineEntryCard(entry)
-                        Spacer(modifier = Modifier.height(8.dp))
+                Column(modifier = Modifier.padding(top = 16.dp)) {
+                    TraceDivider()
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    session.entries.forEachIndexed { index, entry ->
+                        TimelineNodeRow(
+                            entry = entry,
+                            isLast = index == session.entries.size - 1
+                        )
                     }
                 }
             }
@@ -207,74 +195,112 @@ private fun TimelineSessionCard(session: TimelineSession) {
 }
 
 @Composable
-private fun TimelineEntryCard(entry: TimelineEntry) {
+private fun TimelineNodeRow(
+    entry: TimelineEntry,
+    isLast: Boolean
+) {
     var showTechDetails by remember { mutableStateOf(false) }
 
-    val badgeColor = when (entry.severityLevel) {
-        SeverityLevel.CRITICAL -> Color(0xFFDC2626)
-        SeverityLevel.WARNING -> Color(0xFFD97706)
-        SeverityLevel.INFO -> Color(0xFF2563EB)
+    val nodeColor = when (entry.severityLevel) {
+        SeverityLevel.CRITICAL -> TraceRedCritical
+        SeverityLevel.WARNING -> TraceAmberWarning
+        SeverityLevel.INFO -> TraceMintSuccess
     }
 
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics {
+                contentDescription = "Event at ${entry.formattedTime}: ${entry.summaryTitle}. ${entry.detailedDescription}"
+            }
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        // Vertical Line & Node Bullet
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.width(20.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .padding(top = 4.dp)
+                    .size(8.dp)
+                    .background(nodeColor, CircleShape)
+            )
+
+            if (!isLast) {
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .weight(1f)
+                        .padding(vertical = 2.dp)
+                        .background(TraceHairline)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        // Node Content
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(bottom = 16.dp)
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .background(badgeColor, CircleShape)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = entry.formattedTime,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
                 Text(
-                    text = entry.severityLevel.name,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = badgeColor,
-                    fontWeight = FontWeight.Bold
+                    text = entry.formattedTime,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TracePrimary
                 )
+                TraceSeverityBadge(severity = entry.severityLevel)
             }
 
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = entry.summaryTitle,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = TracePrimary
             )
 
             Text(
                 text = entry.detailedDescription,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.bodySmall,
+                color = TraceMuted
             )
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            TextButton(
-                onClick = { showTechDetails = !showTechDetails },
-                modifier = Modifier.align(Alignment.End)
-            ) {
-                Text(if (showTechDetails) "Hide Technical Proof" else "Technical Details", fontSize = 10.sp)
-            }
+            Text(
+                text = if (showTechDetails) "HIDE EVIDENCE DETAILS" else "VIEW EVIDENCE DETAILS →",
+                style = MaterialTheme.typography.labelSmall,
+                color = TraceMintSuccess,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clickable { showTechDetails = !showTechDetails }
+                    .padding(vertical = 4.dp)
+            )
 
             if (showTechDetails) {
-                Column(modifier = Modifier.padding(top = 4.dp)) {
-                    Text("SHA-256 Seal: ${entry.entryHash}", fontFamily = FontFamily.Monospace, fontSize = 9.sp, color = MaterialTheme.colorScheme.secondary)
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, TraceHairline, RectangleShape),
+                    color = TraceSoftSurface
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("EVENT TYPE: ${entry.eventType.name}", style = MaterialTheme.typography.labelSmall, color = TracePrimary)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text("SHA-256 ENTRY HASH:\n${entry.entryHash}", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = TraceMuted)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text("RAW PAYLOAD:\n${entry.rawPayload}", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = TraceMuted)
+                    }
                 }
             }
         }

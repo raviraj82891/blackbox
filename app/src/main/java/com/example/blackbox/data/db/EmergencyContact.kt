@@ -10,6 +10,8 @@ data class EmergencyContact(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val phone: String,
-    val email: String,
-    val relationship: String
+    val email: String = "",
+    val relationship: String = "Trusted Contact",
+    val isEnabled: Boolean = true,
+    val isPrimary: Boolean = false
 )

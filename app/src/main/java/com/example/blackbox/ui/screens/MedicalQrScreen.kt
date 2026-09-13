@@ -4,24 +4,24 @@ import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContactPhone
-import androidx.compose.material.icons.filled.MedicalServices
-import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.blackbox.data.crypto.MedicalIdData
+import com.example.blackbox.ui.designsystem.*
+import com.example.blackbox.ui.theme.*
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 
@@ -38,138 +38,314 @@ fun MedicalQrScreen(
 
     var isEditing by remember { mutableStateOf(false) }
 
-    val qrText = """
-        TRACE MEDICAL EMERGENCY ID
-        Blood Group: $bloodGroup
-        Allergies: $allergies
-        Notes: $notes
-        Emergency Contact: $contactName ($contactPhone)
-    """.trimIndent()
+    var isQrVisible by remember { mutableStateOf(false) }
+    var isMinimalQrMode by remember { mutableStateOf(true) }
+    var showQrConfirmationDialog by remember { mutableStateOf(false) }
 
-    val qrBitmap = remember(qrText) { generateQrBitmap(qrText) }
+    val qrText = remember(bloodGroup, allergies, notes, contactName, contactPhone, isMinimalQrMode) {
+        if (isMinimalQrMode) {
+            """
+                TRACE EMERGENCY MEDICAL ID (MINIMAL)
+                Blood Group: ${bloodGroup.ifBlank { "Not Specified" }}
+                Critical Allergies: ${allergies.ifBlank { "None Known" }}
+                Emergency Phone: ${contactPhone.ifBlank { "None Provided" }}
+            """.trimIndent()
+        } else {
+            """
+                TRACE EMERGENCY MEDICAL ID (FULL)
+                Blood Group: ${bloodGroup.ifBlank { "Not Specified" }}
+                Allergies: ${allergies.ifBlank { "None Known" }}
+                Medical Notes: ${notes.ifBlank { "None" }}
+                Emergency Contact: ${contactName.ifBlank { "Contact" }} (${contactPhone.ifBlank { "None Provided" }})
+            """.trimIndent()
+        }
+    }
 
-    Scaffold { padding ->
+    val qrBitmap = remember(qrText, isQrVisible) {
+        if (isQrVisible) generateQrBitmap(qrText) else null
+    }
+
+    Scaffold(
+        containerColor = TraceCanvas,
+        topBar = {
+            TraceTopBar(
+                title = "MEDICAL ID",
+                subtitle = "ENCRYPTED PROFILE & PUBLIC EMERGENCY QR"
+            )
+        }
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
+                .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.MedicalServices, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = "Emergency Medical ID & QR",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Scannable card for first responders during an emergency",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 1. ENCRYPTED MEDICAL ID PROFILE
+            TraceSectionHeader(
+                title = "MEDICAL PROFILE (ENCRYPTED)",
+                actionText = if (isEditing) "CANCEL" else "EDIT PROFILE",
+                onActionClick = { isEditing = !isEditing }
+            )
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, TraceHairline, RectangleShape),
+                color = TraceSurface
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    if (isEditing) {
+                        OutlinedTextField(
+                            value = bloodGroup,
+                            onValueChange = { bloodGroup = it },
+                            label = { Text("BLOOD GROUP", style = MaterialTheme.typography.labelSmall) },
+                            shape = RectangleShape,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = TraceHairline,
+                                focusedBorderColor = TracePrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = allergies,
+                            onValueChange = { allergies = it },
+                            label = { Text("CRITICAL ALLERGIES", style = MaterialTheme.typography.labelSmall) },
+                            shape = RectangleShape,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = TraceHairline,
+                                focusedBorderColor = TracePrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = notes,
+                            onValueChange = { notes = it },
+                            label = { Text("MEDICAL NOTES", style = MaterialTheme.typography.labelSmall) },
+                            shape = RectangleShape,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = TraceHairline,
+                                focusedBorderColor = TracePrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = contactName,
+                            onValueChange = { contactName = it },
+                            label = { Text("EMERGENCY CONTACT NAME", style = MaterialTheme.typography.labelSmall) },
+                            shape = RectangleShape,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = TraceHairline,
+                                focusedBorderColor = TracePrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = contactPhone,
+                            onValueChange = { contactPhone = it },
+                            label = { Text("EMERGENCY CONTACT PHONE", style = MaterialTheme.typography.labelSmall) },
+                            shape = RectangleShape,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = TraceHairline,
+                                focusedBorderColor = TracePrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        TracePrimaryButton(
+                            text = "SAVE MEDICAL ID SECURELY",
+                            onClick = {
+                                onSaveMedicalId(MedicalIdData(bloodGroup, allergies, notes, contactName, contactPhone))
+                                isEditing = false
+                            }
+                        )
+                    } else {
+                        TraceSpecRow(label = "BLOOD GROUP", value = bloodGroup.ifBlank { "NOT SPECIFIED" })
+                        TraceSpecRow(label = "CRITICAL ALLERGIES", value = allergies.ifBlank { "NONE KNOWN" })
+                        TraceSpecRow(label = "MEDICAL NOTES", value = notes.ifBlank { "NONE REPORTED" })
+                        TraceSpecRow(label = "EMERGENCY CONTACT", value = if (contactName.isNotBlank() || contactPhone.isNotBlank()) "$contactName ($contactPhone)" else "NOT SPECIFIED")
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
-            // QR Code Display Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
+            // 2. PUBLIC EMERGENCY QR SECTION
+            TraceSectionHeader(title = "PUBLIC EMERGENCY QR")
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, TraceHairline, RectangleShape),
+                color = TraceSurface
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp),
+                    modifier = Modifier.padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = "First Responder Emergency QR",
-                        color = Color.Black,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    qrBitmap?.let { bitmap ->
-                        Image(
-                            bitmap = bitmap.asImageBitmap(),
-                            contentDescription = "Medical ID QR Code",
-                            modifier = Modifier.size(220.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Scan with any smartphone camera to view medical notes",
-                        color = Color.Gray,
-                        fontSize = 11.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Medical Profile Data Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Encrypted Medical Profile", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        TextButton(onClick = { isEditing = !isEditing }) {
-                            Text(if (isEditing) "Done" else "Edit Profile")
-                        }
+                        Text(
+                            text = "DISPLAY PUBLIC EMERGENCY QR",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TracePrimary,
+                            letterSpacing = 1.sp
+                        )
+
+                        Switch(
+                            checked = isQrVisible,
+                            onCheckedChange = { checked ->
+                                if (checked) {
+                                    showQrConfirmationDialog = true
+                                } else {
+                                    isQrVisible = false
+                                }
+                            }
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    if (isEditing) {
-                        OutlinedTextField(value = bloodGroup, onValueChange = { bloodGroup = it }, label = { Text("Blood Group") }, modifier = Modifier.fillMaxWidth())
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(value = allergies, onValueChange = { allergies = it }, label = { Text("Allergies") }, modifier = Modifier.fillMaxWidth())
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Medical Notes") }, modifier = Modifier.fillMaxWidth())
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(value = contactName, onValueChange = { contactName = it }, label = { Text("Primary Contact Name") }, modifier = Modifier.fillMaxWidth())
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(value = contactPhone, onValueChange = { contactPhone = it }, label = { Text("Primary Contact Phone") }, modifier = Modifier.fillMaxWidth())
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = {
-                                onSaveMedicalId(MedicalIdData(bloodGroup, allergies, notes, contactName, contactPhone))
-                                isEditing = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Save Medical ID")
+                    Text(
+                        text = "WARNING: Anyone scanning this QR code with a smartphone camera can read the encoded details below.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TraceAmberWarning
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // QR Scope Mode Selector
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (isMinimalQrMode) {
+                            TracePrimaryButton(
+                                text = "MINIMAL QR",
+                                onClick = { isMinimalQrMode = true },
+                                modifier = Modifier.weight(1f)
+                            )
+                            TraceSecondaryButton(
+                                text = "FULL MEDICAL ID",
+                                onClick = { isMinimalQrMode = false },
+                                modifier = Modifier.weight(1f)
+                            )
+                        } else {
+                            TraceSecondaryButton(
+                                text = "MINIMAL QR",
+                                onClick = { isMinimalQrMode = true },
+                                modifier = Modifier.weight(1f)
+                            )
+                            TracePrimaryButton(
+                                text = "FULL MEDICAL ID",
+                                onClick = { isMinimalQrMode = false },
+                                modifier = Modifier.weight(1f)
+                            )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    TraceDivider()
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (isQrVisible && qrBitmap != null) {
+                        Surface(
+                            modifier = Modifier
+                                .size(240.dp)
+                                .background(Color.White)
+                                .padding(12.dp)
+                        ) {
+                            Image(
+                                bitmap = qrBitmap.asImageBitmap(),
+                                contentDescription = "Public Emergency Medical QR Code",
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text(
+                            text = "PRIVACY NOTICE: Do not share screenshots of this QR on public platforms.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TraceAmberWarning,
+                            textAlign = TextAlign.Center
+                        )
                     } else {
-                        ProfileInfoRow("Blood Group:", bloodGroup)
-                        ProfileInfoRow("Allergies:", allergies)
-                        ProfileInfoRow("Notes:", notes)
-                        ProfileInfoRow("Emergency Contact:", "$contactName ($contactPhone)")
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp)
+                                .border(1.dp, TraceHairline, RectangleShape),
+                            color = TraceSoftSurface
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "PUBLIC QR CODE HIDDEN",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TraceMuted,
+                                        letterSpacing = 1.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text("Toggle switch above to generate QR code", style = MaterialTheme.typography.bodySmall, color = TraceMuted)
+                                }
+                            }
+                        }
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(64.dp))
         }
     }
-}
 
-@Composable
-private fun ProfileInfoRow(label: String, value: String) {
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value.ifBlank { "Not Specified" }, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+    // Confirmation Dialog before generating unencrypted QR
+    if (showQrConfirmationDialog) {
+        AlertDialog(
+            onDismissRequest = { showQrConfirmationDialog = false },
+            shape = RectangleShape,
+            containerColor = TraceSurface,
+            title = { Text("GENERATE PUBLIC EMERGENCY QR?", fontWeight = FontWeight.Bold, color = TracePrimary, letterSpacing = 1.sp) },
+            text = {
+                Column {
+                    Text("This will render a scannable QR code on your screen. Please note:", style = MaterialTheme.typography.bodyMedium, color = TraceMuted)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("• Anyone with a camera can read the encoded information.", style = MaterialTheme.typography.bodySmall, color = TraceMuted)
+                    Text("• Device storage remains AES-256 encrypted, but QR codes are plaintext.", style = MaterialTheme.typography.bodySmall, color = TraceMuted)
+                    Text("• ${if (isMinimalQrMode) "Minimal QR mode restricts output to blood group, allergies, and contact phone." else "Full QR mode includes all medical notes."}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = TracePrimary)
+                }
+            },
+            confirmButton = {
+                TracePrimaryButton(
+                    text = "GENERATE PUBLIC QR",
+                    onClick = {
+                        showQrConfirmationDialog = false
+                        isQrVisible = true
+                    },
+                    modifier = Modifier.width(180.dp)
+                )
+            },
+            dismissButton = {
+                TraceSecondaryButton(
+                    text = "CANCEL",
+                    onClick = { showQrConfirmationDialog = false },
+                    modifier = Modifier.width(100.dp)
+                )
+            }
+        )
     }
 }
 

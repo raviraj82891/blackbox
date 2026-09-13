@@ -17,5 +17,8 @@ data class IncidentReport(
     val decryptionKey: String? = null,
     val severityScore: Int = 0,
     val digitalSignature: String? = null,
-    val publicKeyBase64: String? = null
+    val publicKeyBase64: String? = null,
+    val lastUploadedAt: Long? = null,
+    val lastUploadError: String? = null,
+    val contactIdsJson: String = ""
 )

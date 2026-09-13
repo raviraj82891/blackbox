@@ -12,6 +12,9 @@ interface SensorEventDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(event: SensorEvent): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(events: List<SensorEvent>): List<Long>
+
     @Query("SELECT * FROM sensor_events ORDER BY id DESC LIMIT 1")
     suspend fun getLastEvent(): SensorEvent?
 
@@ -23,6 +26,9 @@ interface SensorEventDao {
 
     @Query("SELECT * FROM sensor_events WHERE timestampMs BETWEEN :startMs AND :endMs ORDER BY timestampMs ASC")
     suspend fun getAllEventsInWindow(startMs: Long, endMs: Long): List<SensorEvent>
+
+    @Query("SELECT * FROM sensor_events WHERE timestampMs < :cutoffMs ORDER BY timestampMs ASC")
+    suspend fun getEventsOlderThanList(cutoffMs: Long): List<SensorEvent>
 
     @Query("DELETE FROM sensor_events WHERE timestampMs < :cutoffMs")
     suspend fun purgeOlderThan(cutoffMs: Long): Int

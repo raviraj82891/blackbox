@@ -6,13 +6,15 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.blackbox.data.crypto.KeyManagementService
 import com.example.blackbox.data.db.EventType
+import com.example.blackbox.data.db.IncidentReport
 import com.example.blackbox.data.db.TriggerType
 import com.example.blackbox.data.repository.BlackboxRepository
-import com.example.blackbox.domain.fusion.FusionEngine
 import com.example.blackbox.domain.trigger.CountdownState
 import com.example.blackbox.domain.trigger.TriggerDetector
 import com.example.blackbox.sensor.BatteryCollector
 import com.example.blackbox.service.BlackboxForegroundService
+import com.example.blackbox.service.ProtectionState
+import com.example.blackbox.service.ProtectionStateManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -37,14 +39,24 @@ class HomeViewModel @Inject constructor(
     private val kms = KeyManagementService(application)
     private val batteryCollector = BatteryCollector(application)
 
-    private val _isServiceRunning = MutableStateFlow(true)
-    val isServiceRunning: StateFlow<Boolean> = _isServiceRunning.asStateFlow()
+    // Single Authoritative Protection State from ProtectionStateManager
+    val protectionState: StateFlow<ProtectionState> = ProtectionStateManager.state
+    val protectionError: StateFlow<String?> = ProtectionStateManager.lastError
+
+    // Derived directly from ProtectionStateManager state (no duplicated or optimistic local truth)
+    val isServiceRunning: StateFlow<Boolean> = protectionState
+        .map { it == ProtectionState.ACTIVE || it == ProtectionState.STARTING }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     private val _isBatterySaverActive = MutableStateFlow(false)
     val isBatterySaverActive: StateFlow<Boolean> = _isBatterySaverActive.asStateFlow()
 
-    private val _isChainValid = MutableStateFlow(true)
-    val isChainValid: StateFlow<Boolean> = _isChainValid.asStateFlow()
+    private val _batteryLevel = MutableStateFlow(100)
+    val batteryLevel: StateFlow<Int> = _batteryLevel.asStateFlow()
+
+    // Explicit UNKNOWN/CHECKING state (null = checking/unknown, true = valid, false = invalid)
+    private val _isChainValid = MutableStateFlow<Boolean?>(null)
+    val isChainValid: StateFlow<Boolean?> = _isChainValid.asStateFlow()
 
     val bufferEventCount: StateFlow<Int> = repository.getBufferEventCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
@@ -90,6 +102,14 @@ class HomeViewModel @Inject constructor(
     private val _safetyTimerSeconds = MutableStateFlow<Int?>(null)
     val safetyTimerSeconds: StateFlow<Int?> = _safetyTimerSeconds.asStateFlow()
 
+    // Post-expiration report result state for Alert Sent / Queued / Failed overlay
+    private val _lastActivatedReport = MutableStateFlow<IncidentReport?>(null)
+    val lastActivatedReport: StateFlow<IncidentReport?> = _lastActivatedReport.asStateFlow()
+
+    fun clearLastActivatedReport() {
+        _lastActivatedReport.value = null
+    }
+
     private var countdownTimerJob: Job? = null
     private var safetyCheckInJob: Job? = null
 
@@ -113,12 +133,13 @@ class HomeViewModel @Inject constructor(
             }
         }
 
-        // Periodically check battery status for Power Saver Mode
+        // Periodically check battery status for Power Saver Mode & Live Battery Level
         viewModelScope.launch {
             while (true) {
                 val battery = batteryCollector.getBatteryStatus()
+                _batteryLevel.value = battery.levelPercentage
                 _isBatterySaverActive.value = battery.levelPercentage < 15 && !battery.isCharging
-                delay(30000)
+                delay(5000)
             }
         }
     }
@@ -183,11 +204,12 @@ class HomeViewModel @Inject constructor(
     private fun onCountdownExpired(triggerType: TriggerType) {
         viewModelScope.launch {
             val timelineJson = "Emergency Incident Activated via $triggerType"
-            repository.freezeBufferAndCreateIncident(
+            val report = repository.freezeBufferAndCreateIncident(
                 triggerType = triggerType,
                 windowMinutes = 60,
                 timelineJson = timelineJson
             )
+            _lastActivatedReport.value = report
             triggerDetector.resetState()
         }
     }
@@ -197,7 +219,6 @@ class HomeViewModel @Inject constructor(
             action = BlackboxForegroundService.ACTION_PAUSE
         }
         getApplication<Application>().startService(intent)
-        _isServiceRunning.value = false
     }
 
     fun resumeProtectionService() {
@@ -205,7 +226,6 @@ class HomeViewModel @Inject constructor(
             action = BlackboxForegroundService.ACTION_RESUME
         }
         getApplication<Application>().startService(intent)
-        _isServiceRunning.value = true
     }
 
     fun triggerManualSos() {

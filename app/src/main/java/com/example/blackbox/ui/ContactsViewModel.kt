@@ -9,19 +9,24 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.blackbox.R
+import com.example.blackbox.data.api.AWSBackendApi
+import com.example.blackbox.data.api.NotificationRequest
 import com.example.blackbox.data.db.EmergencyContact
 import com.example.blackbox.data.repository.BlackboxRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
 class ContactsViewModel @Inject constructor(
     application: Application,
-    private val repository: BlackboxRepository
+    private val repository: BlackboxRepository,
+    private val apiService: AWSBackendApi
 ) : AndroidViewModel(application) {
 
     val contacts: StateFlow<List<EmergencyContact>> = repository.getAllEmergencyContacts()
@@ -37,28 +42,66 @@ class ContactsViewModel @Inject constructor(
         }
     }
 
+    fun updateContact(contact: EmergencyContact) {
+        viewModelScope.launch {
+            repository.insertEmergencyContact(contact)
+        }
+    }
+
     fun removeContact(id: String) {
         viewModelScope.launch {
             repository.deleteEmergencyContact(id)
         }
     }
 
+    fun setPrimaryContact(target: EmergencyContact) {
+        viewModelScope.launch {
+            val current = contacts.value
+            for (c in current) {
+                val updated = c.copy(isPrimary = c.id == target.id)
+                repository.insertEmergencyContact(updated)
+            }
+        }
+    }
+
     /**
-     * Send Test Alert Action — Fires a local notification previewing what that contact would receive
-     * in a real emergency, verifying contact setup without requiring a backend.
+     * Local Notification Preview — Generates a local preview notification on the user's phone ONLY.
+     * Never claims that a real contact was notified.
      */
-    fun sendTestAlert(contact: EmergencyContact) {
+    fun previewAlertOnThisPhone(contact: EmergencyContact) {
         val manager = getApplication<Application>().getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         val notification = NotificationCompat.Builder(getApplication(), TEST_CHANNEL_ID)
-            .setContentTitle("TEST ALERT Preview for ${contact.name}")
-            .setContentText("Emergency alert preview sent to ${contact.phone} / ${contact.email}. Encrypted incident report link ready.")
+            .setContentTitle("TRACE Local Alert Preview (For ${contact.name})")
+            .setContentText("Local preview generated on this phone. Note: This does NOT send an SMS or alert to ${contact.name}.")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()
 
         manager.notify(contact.id.hashCode(), notification)
+    }
+
+    /**
+     * Real Test Alert to Contact — Dispatches an actual test notification request to the backend server.
+     * Returns true/false based on the actual backend response.
+     */
+    suspend fun sendRealTestAlertToContact(contact: EmergencyContact): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        try {
+            val req = NotificationRequest(
+                incidentId = "TEST-${contact.id.take(6)}",
+                message = "TRACE Safety System Test Alert: Sent by ${contact.name}'s contact settings.",
+                contacts = listOf(contact.id)
+            )
+            val response = apiService.notifyContacts("TEST-${contact.id.take(6)}", req)
+            if (response.isSuccessful) {
+                Pair(true, "Real test alert successfully dispatched to ${contact.name} (${contact.phone}).")
+            } else {
+                Pair(false, "Backend dispatch failed: HTTP ${response.code()} ${response.message()}")
+            }
+        } catch (e: Exception) {
+            Pair(false, "Network error: Unable to reach backend server. ${e.localizedMessage ?: ""}")
+        }
     }
 
     private fun createTestNotificationChannel() {

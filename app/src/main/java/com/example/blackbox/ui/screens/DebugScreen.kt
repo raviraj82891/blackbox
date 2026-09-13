@@ -1,164 +1,73 @@
 package com.example.blackbox.ui.screens
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.blackbox.ui.theme.MutedSlate
-import com.example.blackbox.ui.theme.SoftBlueContainer
+import com.example.blackbox.ui.designsystem.*
+import com.example.blackbox.ui.theme.*
 
 @Composable
 fun DebugScreen(
     onSimulateCrashClicked: () -> Unit,
     onManualSosClicked: () -> Unit
 ) {
-    Scaffold { padding ->
+    Scaffold(
+        containerColor = TraceCanvas,
+        topBar = {
+            TraceTopBar(
+                title = "DEBUG TOOLS",
+                subtitle = "DEVELOPER DEMO & SIMULATION CONTROL PANEL"
+            )
+        }
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
+                .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.BugReport,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = "Viva Demo & Debug Control Panel",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Debug build only • Simulated incident triggers for live demonstration",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
             Spacer(modifier = Modifier.height(16.dp))
 
-            // UI Label indicating simulated incidents do not represent real sensor data
+            TraceSectionHeader(title = "SIMULATED INCIDENT TRIGGER")
+
             Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                color = SoftBlueContainer
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, TraceHairline, RectangleShape),
+                color = TraceSurface
             ) {
-                Row(
-                    modifier = Modifier.padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Info,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Notice: Simulated incidents generate synthetic test telemetry for demonstration purposes and do not represent real sensor hardware data.",
-                        fontSize = 12.sp,
-                        color = MutedSlate,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                )
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = "Simulate High-Speed Crash Sequence",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Injects a synthetic 30-second timeline sequence: Vehicle Cruising at 65 km/h -> Harsh Braking -> Severe Acceleration Spike (34.7 m/s²) -> Audio Impact Event -> 30s SOS Countdown.",
+                        text = "Notice: Simulated triggers generate synthetic test telemetry for demonstration and verification purposes only.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = TraceMuted
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    Button(
-                        onClick = onSimulateCrashClicked,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Inject Simulated Crash Sequence", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
-                )
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = "Instant Manual SOS Trigger",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Triggers the 30-second emergency countdown as if initiated from the Quick Settings Tile or in-app SOS button.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    TracePrimaryButton(
+                        text = "INJECT SIMULATED CRASH SEQUENCE",
+                        onClick = onSimulateCrashClicked
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    Button(
+                    TracePrimaryButton(
+                        text = "TRIGGER MANUAL SOS COUNTDOWN",
                         onClick = onManualSosClicked,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Trigger Manual SOS", fontWeight = FontWeight.Bold, color = Color.White)
-                    }
+                        isCritical = true
+                    )
                 }
             }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }

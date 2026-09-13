@@ -38,22 +38,23 @@ object HashChainManager {
     }
 
     /**
-     * Verifies that every link in the hash chain is mathematically intact.
+     * Verifies that every link in the hash chain is mathematically intact and cryptographically
+     * anchored to the trusted boundary checkpoint.
      *
-     * For partial or pruned rolling buffer windows, the verification treats
-     * the first retained event's prevHash as the anchored boundary and validates
-     * cryptographic continuity and payload integrity for all subsequent events.
-     *
+     * @param events Chronological list of retained sensor events.
+     * @param expectedBoundaryHash The trusted prevHash expected for the first retained event.
      * @return true if no entry was modified, inserted, or removed post-hoc.
      */
-    fun verifyChainIntegrity(events: List<SensorEvent>): Boolean {
+    fun verifyChainIntegrity(
+        events: List<SensorEvent>,
+        expectedBoundaryHash: String = INITIAL_HASH
+    ): Boolean {
         if (events.isEmpty()) return true
 
-        // Treat the first retained event's prevHash as the anchored boundary
-        var expectedPrevHash = events.first().prevHash
+        var expectedPrevHash = expectedBoundaryHash
 
         for (event in events) {
-            // 1. Verify link continuity
+            // 1. Verify link continuity against expected previous hash
             if (event.prevHash != expectedPrevHash) {
                 return false
             }
@@ -62,7 +63,7 @@ object HashChainManager {
             if (event.entryHash != calculatedHash) {
                 return false
             }
-            // 3. Advance expected prevHash
+            // 3. Advance expected prevHash to current event's entryHash
             expectedPrevHash = event.entryHash
         }
         return true

@@ -19,6 +19,9 @@ interface IncidentReportDao {
     @Query("SELECT * FROM incident_reports ORDER BY triggeredAt DESC")
     fun getAllReports(): Flow<List<IncidentReport>>
 
+    @Query("SELECT * FROM incident_reports ORDER BY triggeredAt DESC")
+    suspend fun getAllReportsList(): List<IncidentReport>
+
     @Query("SELECT * FROM incident_reports WHERE id = :id LIMIT 1")
     suspend fun getReportById(id: String): IncidentReport?
 

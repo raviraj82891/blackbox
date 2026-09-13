@@ -29,8 +29,9 @@ class TimelineViewModel @Inject constructor(
         FusionEngine.groupTimelineIntoSessions(flatEntries)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _isChainValid = MutableStateFlow(true)
-    val isChainValid: StateFlow<Boolean> = _isChainValid.asStateFlow()
+    // Explicit verification lifecycle: null = CHECKING, true = VERIFIED, false = WARNING
+    private val _isChainValid = MutableStateFlow<Boolean?>(null)
+    val isChainValid: StateFlow<Boolean?> = _isChainValid.asStateFlow()
 
     init {
         viewModelScope.launch {

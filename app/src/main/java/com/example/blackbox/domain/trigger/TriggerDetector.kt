@@ -19,12 +19,13 @@ sealed class CountdownState {
 }
 
 /**
- * Trigger Detector — On-device physics engine detecting severe crashes and falls.
+ * Trigger Detector — On-device physics engine detecting severe crashes and falls
+ * using a complete 3-Stage Multi-Evidence Physics Model.
  *
- * Fall Detection Physics (3-Stage Model):
+ * 3-Stage Model:
  * 1. Free-Fall Weightlessness: Vector magnitude < 3.5 m/s² for 150-600ms.
- * 2. Heavy Impact Spike: Vector magnitude > 20.0 m/s².
- * 3. Orientation Shift & Post-Fall Stillness.
+ * 2. Heavy Impact Spike: Vector magnitude > impactThresholdMs2 (default 20.0 m/s²).
+ * 3. Orientation Shift & Gyroscopic Angular Rotation: Gyro delta > gyroThresholdRad (default 2.5 rad/s).
  */
 class TriggerDetector {
 
@@ -38,8 +39,9 @@ class TriggerDetector {
     private var possibleImpactTimeMs: Long = 0L
     private var lastPeakMagnitude: Double = 0.0
 
-    // Latest gyroscopic rotation magnitude
+    // Latest gyroscopic rotation magnitude (rad/s) & timestamp
     private var latestGyroDelta: Float = 0f
+    private var latestGyroTimestampMs: Long = 0L
 
     // Free-fall weightlessness tracking for 3-Stage Fall Detection
     private var freeFallStartTimeMs: Long = 0L
@@ -49,16 +51,30 @@ class TriggerDetector {
     private var cancelledCountdownsInWindow = 0
     private var lastCancelledPeakMagnitude = 0.0
 
-    fun updateGyroscope(delta: Float) {
+    // Master toggle for automatic crash/fall evaluation
+    var isAutoDetectionEnabled: Boolean = true
+
+    fun updateGyroscope(delta: Float, timestampMs: Long = System.currentTimeMillis()) {
         latestGyroDelta = delta
+        latestGyroTimestampMs = timestampMs
     }
 
+    /**
+     * Evaluates incoming accelerometer vector magnitude using the 3-Stage Multi-Evidence Physics Model.
+     * Returns true ONLY if genuine multi-stage fall or crash evidence is confirmed.
+     */
     fun evaluateMotion(accelMagnitude: Float, timestampMs: Long): Boolean {
+        // Skip automatic crash/fall evaluation if master auto-detection toggle is disabled
+        if (!isAutoDetectionEnabled) {
+            return false
+        }
+
+        // Prevent duplicate triggers while a countdown or activation is already in progress
         if (_countdownState.value is CountdownState.ActiveCountdown || _countdownState.value is CountdownState.Activated) {
             return false
         }
 
-        // Stage 1: Detect free-fall weightlessness (< 3.5 m/s²)
+        // Stage 1: Detect free-fall weightlessness (< 3.5 m/s² for 150-600ms)
         if (accelMagnitude < 3.5f) {
             if (freeFallStartTimeMs == 0L) {
                 freeFallStartTimeMs = timestampMs
@@ -66,7 +82,7 @@ class TriggerDetector {
                 isFreeFallDetected = true
             }
         } else if (accelMagnitude > 12.0f) {
-            // Reset free-fall window if normal motion resumes without impact
+            // Reset free-fall window if normal motion resumes without impact within 800ms
             if (timestampMs - freeFallStartTimeMs > 800) {
                 isFreeFallDetected = false
                 freeFallStartTimeMs = 0L
@@ -78,23 +94,35 @@ class TriggerDetector {
             possibleImpactTimeMs = timestampMs
             lastPeakMagnitude = accelMagnitude.toDouble()
 
-            // Classify as AUTO_FALL if preceded by free-fall weightlessness within 1.5s
-            val triggerType = if (isFreeFallDetected && (timestampMs - freeFallStartTimeMs) <= 1500) {
-                TriggerType.AUTO_FALL
-            } else {
-                TriggerType.AUTO_CRASH
+            val isRecentFreeFall = isFreeFallDetected && (timestampMs - freeFallStartTimeMs) <= 1500
+            val isRecentGyroRotation = (latestGyroDelta >= gyroThresholdRad.toFloat()) &&
+                    (latestGyroTimestampMs == 0L || (timestampMs - latestGyroTimestampMs) <= 1500)
+
+            // Multi-Stage Evidence Classification:
+            // 1. AUTO_FALL: Stage 1 (Free-fall) + Stage 2 (Impact)
+            // 2. AUTO_CRASH: Stage 2 (Impact) + Stage 3 (Angular Rotation / Gyro Delta >= gyroThresholdRad)
+            val triggerType: TriggerType? = when {
+                isRecentFreeFall -> TriggerType.AUTO_FALL
+                isRecentGyroRotation -> TriggerType.AUTO_CRASH
+                else -> null // Single accel spike without free-fall OR gyro rotation is treated as hard table drop / bumped phone and filtered out
             }
 
-            isFreeFallDetected = false
-            freeFallStartTimeMs = 0L
+            if (triggerType != null) {
+                isFreeFallDetected = false
+                freeFallStartTimeMs = 0L
 
-            // 30-second confirmation for automatic crash/fall detection
-            startCountdown(triggerType, lastPeakMagnitude, durationSeconds = 30)
-            return true
+                // 30-second confirmation countdown for automatic crash/fall detection
+                startCountdown(triggerType, lastPeakMagnitude, durationSeconds = 30)
+                return true
+            }
         }
         return false
     }
 
+    /**
+     * Initiates confirmation countdown. Manual SOS bypasses multi-stage physics evaluation
+     * and uses an independent 3-second quick path.
+     */
     fun startCountdown(triggerType: TriggerType, magnitude: Double = 0.0, durationSeconds: Int = 30) {
         val duration = if (triggerType == TriggerType.MANUAL_SOS) 3 else durationSeconds
         _countdownState.value = CountdownState.ActiveCountdown(
@@ -121,6 +149,7 @@ class TriggerDetector {
             cancelledCountdownsInWindow++
             lastCancelledPeakMagnitude = current.impactMagnitude
         }
+        resetInternalState()
         _countdownState.value = CountdownState.Cancelled
         _countdownState.value = CountdownState.Idle
     }
@@ -133,7 +162,16 @@ class TriggerDetector {
         cancelledCountdownsInWindow = 0
     }
 
+    private fun resetInternalState() {
+        isFreeFallDetected = false
+        freeFallStartTimeMs = 0L
+        latestGyroDelta = 0f
+        latestGyroTimestampMs = 0L
+        possibleImpactTimeMs = 0L
+    }
+
     fun resetState() {
+        resetInternalState()
         _countdownState.value = CountdownState.Idle
     }
 }

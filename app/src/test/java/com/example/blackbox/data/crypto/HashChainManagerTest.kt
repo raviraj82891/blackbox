@@ -49,76 +49,151 @@ class HashChainManagerTest {
     }
 
     @Test
-    fun testIntactCompleteChain() {
+    fun testIntactCompleteChainWithGenesisAnchor() {
         val chain = generateSampleChain(10, HashChainManager.INITIAL_HASH)
-        assertTrue("Intact complete chain starting from INITIAL_HASH should pass verification", HashChainManager.verifyChainIntegrity(chain))
+        assertTrue(
+            "Intact complete chain starting from INITIAL_HASH must pass boundary verification",
+            HashChainManager.verifyChainIntegrity(chain, expectedBoundaryHash = HashChainManager.INITIAL_HASH)
+        )
     }
 
     @Test
-    fun testIntactPartialChain() {
-        val fullChain = generateSampleChain(10, HashChainManager.INITIAL_HASH)
-        // Partial chain from index 3 to 8
-        val partialChain = fullChain.subList(3, 8)
-        assertTrue("Intact partial chain starting with non-initial prevHash should pass verification using boundary anchor", HashChainManager.verifyChainIntegrity(partialChain))
-    }
-
-    @Test
-    fun testDeletedOldEvents() {
+    fun testBoundaryAnchorVerificationAfterPruning() {
         val fullChain = generateSampleChain(15, HashChainManager.INITIAL_HASH)
-        // Simulate retention pruning of events 1..5, retaining events 6..15
-        val retainedEvents = fullChain.subList(5, 15)
-        assertTrue("Retained events after pruning old events should verify successfully against boundary anchor", HashChainManager.verifyChainIntegrity(retainedEvents))
+        val lastPurgedEvent = fullChain[4] // 5th event (index 4)
+        val boundaryAnchorHash = lastPurgedEvent.entryHash
+
+        val retainedChain = fullChain.subList(5, 15)
+
+        // Retained chain first event (index 5) has prevHash == lastPurgedEvent.entryHash (boundaryAnchorHash)
+        assertTrue(
+            "Retained chain verified against persisted boundary anchor hash must pass",
+            HashChainManager.verifyChainIntegrity(retainedChain, expectedBoundaryHash = boundaryAnchorHash)
+        )
     }
 
     @Test
-    fun testModifiedPayload() {
-        val chain = generateSampleChain(10, HashChainManager.INITIAL_HASH).toMutableList()
-        val tamperedEvent = chain[4].copy(payloadJson = """{"eventIndex":5,"magnitude":999.0}""")
-        chain[4] = tamperedEvent
+    fun testModifiedFirstRetainedEvent_PayloadTampered() {
+        val fullChain = generateSampleChain(10, HashChainManager.INITIAL_HASH)
+        val boundaryAnchorHash = fullChain[2].entryHash
+        val retainedChain = fullChain.subList(3, 10).toMutableList()
 
-        assertFalse("Chain with tampered event payload should fail verification", HashChainManager.verifyChainIntegrity(chain))
+        // Attacker modifies the payload of the first retained event
+        val tamperedFirst = retainedChain[0].copy(payloadJson = """{"tampered":true}""")
+        retainedChain[0] = tamperedFirst
+
+        assertFalse(
+            "Tampering payload of the first retained event must cause verification failure",
+            HashChainManager.verifyChainIntegrity(retainedChain, expectedBoundaryHash = boundaryAnchorHash)
+        )
     }
 
     @Test
-    fun testModifiedTimestamp() {
-        val chain = generateSampleChain(10, HashChainManager.INITIAL_HASH).toMutableList()
-        val tamperedEvent = chain[3].copy(timestampMs = 1700000000000L)
-        chain[3] = tamperedEvent
+    fun testModifiedFirstRetainedEvent_PrevHashTampered() {
+        val fullChain = generateSampleChain(10, HashChainManager.INITIAL_HASH)
+        val boundaryAnchorHash = fullChain[2].entryHash
+        val retainedChain = fullChain.subList(3, 10).toMutableList()
 
-        assertFalse("Chain with tampered event timestamp should fail verification", HashChainManager.verifyChainIntegrity(chain))
+        // Attacker tries to alter prevHash of the first retained event and recomputes entryHash
+        val fakePrevHash = "a1b2c3d4e5f67890a1b2c3d4e5f67890a1b2c3d4e5f67890a1b2c3d4e5f67890"
+        val tamperedFirst = createHelperEvent(
+            id = retainedChain[0].id,
+            timestampMs = retainedChain[0].timestampMs,
+            type = retainedChain[0].type,
+            payloadJson = retainedChain[0].payloadJson,
+            prevHash = fakePrevHash
+        )
+        retainedChain[0] = tamperedFirst
+
+        assertFalse(
+            "Changing prevHash of first retained event away from boundary anchor must cause verification failure",
+            HashChainManager.verifyChainIntegrity(retainedChain, expectedBoundaryHash = boundaryAnchorHash)
+        )
     }
 
     @Test
-    fun testModifiedPrevHash() {
-        val chain = generateSampleChain(10, HashChainManager.INITIAL_HASH).toMutableList()
-        val tamperedEvent = chain[2].copy(prevHash = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
-        chain[2] = tamperedEvent
+    fun testDeletedFirstRetainedEventDetected() {
+        val fullChain = generateSampleChain(10, HashChainManager.INITIAL_HASH)
+        val boundaryAnchorHash = fullChain[2].entryHash // Expected prevHash for retained index 3
+        val retainedChain = fullChain.subList(3, 10).toMutableList()
 
-        assertFalse("Chain with tampered prevHash should fail verification", HashChainManager.verifyChainIntegrity(chain))
+        // Attacker deletes the first retained event (index 0 of retainedChain, index 3 of fullChain)
+        retainedChain.removeAt(0)
+
+        assertFalse(
+            "Deleting the first retained event must fail verification because new first event's prevHash doesn't match boundary anchor",
+            HashChainManager.verifyChainIntegrity(retainedChain, expectedBoundaryHash = boundaryAnchorHash)
+        )
     }
 
     @Test
-    fun testInsertedEvent() {
-        val chain = generateSampleChain(10, HashChainManager.INITIAL_HASH).toMutableList()
+    fun testInsertedFirstEventDetected() {
+        val fullChain = generateSampleChain(10, HashChainManager.INITIAL_HASH)
+        val boundaryAnchorHash = fullChain[2].entryHash
+        val retainedChain = fullChain.subList(3, 10).toMutableList()
+
+        // Attacker inserts an unauthorized event at the front of the retained chain
         val insertedEvent = createHelperEvent(
             id = 999L,
-            timestampMs = chain[4].timestampMs + 500L,
+            timestampMs = retainedChain[0].timestampMs - 100L,
             type = EventType.ACCEL,
-            payloadJson = """{"inserted":true}""",
-            prevHash = chain[3].entryHash
+            payloadJson = """{"insertedAtFront":true}""",
+            prevHash = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         )
-        chain.add(4, insertedEvent)
+        retainedChain.add(0, insertedEvent)
 
-        assertFalse("Chain with unauthorized inserted event should fail verification", HashChainManager.verifyChainIntegrity(chain))
+        assertFalse(
+            "Inserting an unauthorized event at the front must fail verification against boundary anchor",
+            HashChainManager.verifyChainIntegrity(retainedChain, expectedBoundaryHash = boundaryAnchorHash)
+        )
     }
 
     @Test
-    fun testRemovedEvent() {
-        val chain = generateSampleChain(10, HashChainManager.INITIAL_HASH).toMutableList()
-        // Remove event at index 4
-        chain.removeAt(4)
+    fun testModifiedMiddleEventDetected() {
+        val fullChain = generateSampleChain(10, HashChainManager.INITIAL_HASH)
+        val boundaryAnchorHash = fullChain[2].entryHash
+        val retainedChain = fullChain.subList(3, 10).toMutableList()
 
-        assertFalse("Chain with missing event removed from middle should fail verification", HashChainManager.verifyChainIntegrity(chain))
+        // Attacker modifies a middle event (index 3 of retainedChain)
+        val tamperedMiddle = retainedChain[3].copy(payloadJson = """{"middleTampered":true}""")
+        retainedChain[3] = tamperedMiddle
+
+        assertFalse(
+            "Modifying a middle event must fail chain integrity verification",
+            HashChainManager.verifyChainIntegrity(retainedChain, expectedBoundaryHash = boundaryAnchorHash)
+        )
+    }
+
+    @Test
+    fun testDeletedMiddleEventDetected() {
+        val fullChain = generateSampleChain(10, HashChainManager.INITIAL_HASH)
+        val boundaryAnchorHash = fullChain[2].entryHash
+        val retainedChain = fullChain.subList(3, 10).toMutableList()
+
+        // Attacker deletes a middle event
+        retainedChain.removeAt(2)
+
+        assertFalse(
+            "Deleting a middle event must fail chain continuity verification",
+            HashChainManager.verifyChainIntegrity(retainedChain, expectedBoundaryHash = boundaryAnchorHash)
+        )
+    }
+
+    @Test
+    fun testModifiedFinalEventDetected() {
+        val fullChain = generateSampleChain(10, HashChainManager.INITIAL_HASH)
+        val boundaryAnchorHash = fullChain[2].entryHash
+        val retainedChain = fullChain.subList(3, 10).toMutableList()
+
+        // Attacker modifies the final event
+        val lastIdx = retainedChain.size - 1
+        val tamperedLast = retainedChain[lastIdx].copy(payloadJson = """{"lastTampered":true}""")
+        retainedChain[lastIdx] = tamperedLast
+
+        assertFalse(
+            "Modifying the final event must fail integrity verification",
+            HashChainManager.verifyChainIntegrity(retainedChain, expectedBoundaryHash = boundaryAnchorHash)
+        )
     }
 
     @Test

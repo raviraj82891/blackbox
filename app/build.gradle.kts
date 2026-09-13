@@ -8,13 +8,12 @@ plugins {
 
 android {
     namespace = "com.example.blackbox"
-    compileSdk = 34
-    buildToolsVersion = "34.0.0"
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.blackbox"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
@@ -121,4 +120,7 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
