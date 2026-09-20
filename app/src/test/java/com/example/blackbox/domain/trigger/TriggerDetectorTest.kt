@@ -15,7 +15,7 @@ class TriggerDetectorTest {
     fun setUp() {
         triggerDetector = TriggerDetector()
         triggerDetector.resetState()
-        triggerDetector.impactThresholdMs2 = 20.0
+        triggerDetector.impactThresholdMs2 = 24.0
         triggerDetector.gyroThresholdRad = 2.5
         triggerDetector.isAutoDetectionEnabled = true
     }
@@ -33,96 +33,187 @@ class TriggerDetectorTest {
     }
 
     @Test
-    fun testRunningMotionDoesNotTrigger() {
+    fun testCandidateRejectedForInsufficientFreeFallNeverReachesCountdown() {
         val baseTime = 1700000000000L
-        val runningMagnitudes = listOf(9.8f, 12.8f, 7.2f, 13.5f, 6.5f, 14.1f, 8.0f)
 
-        for ((index, mag) in runningMagnitudes.withIndex()) {
-            val triggered = triggerDetector.evaluateMotion(mag, baseTime + (index * 150L))
-            assertFalse("Dynamic running motion must not trigger detection", triggered)
-        }
+        // 1. Brief weightless dip < 200ms (e.g. 150ms)
+        triggerDetector.evaluateMotion(1.5f, baseTime)
+        triggerDetector.evaluateMotion(1.5f, baseTime + 100L)
+
+        // 2. Next sample returns above 1.8 m/s² -> Insufficient duration (150ms < 200ms) -> REJECTED & TOKEN INVALIDATED
+        val rejectedResult = triggerDetector.evaluateMotion(10.0f, baseTime + 150L)
+        assertFalse("Rejected candidate must return false", rejectedResult)
+
+        // 3. High impact spike 68.0 m/s² occurs without valid candidate token
+        triggerDetector.updateGyroscope(3.5f, baseTime + 180L)
+        val highSpikeTriggered = triggerDetector.evaluateMotion(68.0f, baseTime + 180L)
+
+        // MUST NOT transition to FALL_CONFIRMED, AUTO_CRASH, or EMERGENCY_COUNTDOWN!
+        assertFalse("A rejected candidate must NEVER reach AUTO_CRASH or EMERGENCY_COUNTDOWN without a valid candidate token", highSpikeTriggered)
         assertEquals(CountdownState.Idle, triggerDetector.countdownState.value)
     }
 
     @Test
-    fun testVehicleVibrationDoesNotTrigger() {
-        val baseTime = 1700000000000L
-        val vehicleMagnitudes = listOf(9.8f, 10.9f, 11.4f, 10.1f, 11.8f, 9.2f)
-
-        for ((index, mag) in vehicleMagnitudes.withIndex()) {
-            val triggered = triggerDetector.evaluateMotion(mag, baseTime + (index * 100L))
-            assertFalse("Vehicle vibration must not trigger crash detection", triggered)
-        }
-        assertEquals(CountdownState.Idle, triggerDetector.countdownState.value)
-    }
-
-    @Test
-    fun testHardTableImpactWithoutGyroRotationIsFilteredOut() {
+    fun testZeroDelayImpactWithoutPriorFreeFallEndIsRejected() {
         val baseTime = 1700000000000L
 
-        // Gyro remains low (0.5 rad/s < threshold 2.5 rad/s)
-        triggerDetector.updateGyroscope(0.5f, baseTime)
-
-        // Single high accelerometer spike (25 m/s² > 20 m/s²) without gyro rotation or free-fall
-        val triggered = triggerDetector.evaluateMotion(25.0f, baseTime)
-
-        assertFalse("Hard table drop / phone bump without gyro rotation or free-fall must be filtered out", triggered)
-        assertEquals(CountdownState.Idle, triggerDetector.countdownState.value)
-    }
-
-    @Test
-    fun testHighGyroRotationAloneWithoutImpactDoesNotTrigger() {
-        val baseTime = 1700000000000L
-
-        // High rotation (5.0 rad/s > threshold 2.5 rad/s)
-        triggerDetector.updateGyroscope(5.0f, baseTime)
-
-        // Normal gravity accelerometer reading (9.81 m/s²)
-        val triggered = triggerDetector.evaluateMotion(9.81f, baseTime)
-
-        assertFalse("High gyroscopic rotation alone without impact must not trigger crash detection", triggered)
-        assertEquals(CountdownState.Idle, triggerDetector.countdownState.value)
-    }
-
-    @Test
-    fun testGenuineCrashWithImpactAndGyroRotationTriggersAutoCrash() {
-        val baseTime = 1700000000000L
-
-        // Stage 3: Gyroscope registers angular rotation spike (3.5 rad/s >= threshold 2.5 rad/s)
-        triggerDetector.updateGyroscope(3.5f, baseTime)
-
-        // Stage 2: Heavy impact spike (32 m/s² > threshold 20 m/s²)
-        val triggered = triggerDetector.evaluateMotion(32.0f, baseTime)
-
-        assertTrue("Genuine crash with high impact and gyro rotation must trigger AUTO_CRASH", triggered)
-
-        val state = triggerDetector.countdownState.value
-        assertTrue("State must be ActiveCountdown", state is CountdownState.ActiveCountdown)
-        val active = state as CountdownState.ActiveCountdown
-        assertEquals(TriggerType.AUTO_CRASH, active.triggerType)
-        assertEquals(30, active.secondsRemaining)
-        assertEquals(32.0, active.impactMagnitude, 0.01)
-    }
-
-    @Test
-    fun testGenuineFallWithFreeFallAndImpactTriggersAutoFall() {
-        val baseTime = 1700000000000L
-
-        // Stage 1: Free-fall weightlessness (< 3.5 m/s² for 300ms)
-        triggerDetector.evaluateMotion(1.2f, baseTime)
+        // Impact spike occurs without free-fall end transition (freeFallToImpactMs == 0)
+        triggerDetector.evaluateMotion(1.0f, baseTime)
         triggerDetector.evaluateMotion(1.0f, baseTime + 200L)
-        triggerDetector.evaluateMotion(1.1f, baseTime + 300L)
 
-        // Stage 2: Heavy impact spike (24 m/s² > threshold 20 m/s²)
-        val triggered = triggerDetector.evaluateMotion(24.0f, baseTime + 400L)
+        // Impact on same millisecond as free-fall sample without freeFallToImpactMs delay
+        val triggered = triggerDetector.evaluateMotion(28.0f, baseTime + 200L)
+        assertFalse("Impact occurring with zero delay (freeFallToImpactMs == 0) must be rejected", triggered)
+    }
 
-        assertTrue("Genuine fall with free-fall and impact must trigger AUTO_FALL", triggered)
+    @Test
+    fun testSevenMsFreeFallToImpactDelayIsAccepted() {
+        val baseTime = 1700000000000L
+
+        // Free-fall >= 200ms
+        triggerDetector.evaluateMotion(1.0f, baseTime)
+        triggerDetector.evaluateMotion(1.0f, baseTime + 200L)
+
+        // Exits free-fall at t=200ms into a non-impact sample (5.0 m/s²)
+        triggerDetector.evaluateMotion(5.0f, baseTime + 200L)
+
+        // Gyro rotation
+        triggerDetector.updateGyroscope(2.2f, baseTime + 207L)
+
+        // Impact occurs 7ms later at t=207ms (freeFallToImpactMs = 207 - 200 = 7ms)
+        val triggered = triggerDetector.evaluateMotion(28.0f, baseTime + 207L)
+
+        assertTrue("Free-fall to impact delay of 7ms (1ms..600ms window) must be accepted", triggered)
+        val state = triggerDetector.countdownState.value
+        assertTrue(state is CountdownState.ActiveCountdown)
+        assertEquals(TriggerType.AUTO_FALL, (state as CountdownState.ActiveCountdown).triggerType)
+    }
+
+    @Test
+    fun testSixHundredOneMsFreeFallToImpactDelayIsRejected() {
+        val baseTime = 1700000000000L
+
+        // Free-fall >= 200ms
+        triggerDetector.evaluateMotion(1.0f, baseTime)
+        triggerDetector.evaluateMotion(1.0f, baseTime + 200L)
+
+        // Exits free-fall at t=200ms
+        triggerDetector.evaluateMotion(5.0f, baseTime + 200L)
+
+        // Impact occurs 601ms later at t=801ms (> 600ms max allowed window)
+        triggerDetector.updateGyroscope(2.2f, baseTime + 801L)
+        val triggered = triggerDetector.evaluateMotion(28.0f, baseTime + 801L)
+
+        assertFalse("Free-fall to impact delay of 601ms (> 600ms max allowed) must be rejected", triggered)
+        assertEquals(CountdownState.Idle, triggerDetector.countdownState.value)
+    }
+
+    @Test
+    fun testDirectTransitionToImpactSampleUsesLastWeightlessTimestampBoundary() {
+        val baseTime = 1700000000000L
+
+        // Stage 1: Free-fall weightlessness (< 1.8 m/s² for >= 200ms)
+        triggerDetector.evaluateMotion(1.2f, baseTime)
+        triggerDetector.evaluateMotion(1.0f, baseTime + 50L)
+        triggerDetector.evaluateMotion(1.1f, baseTime + 100L)
+        triggerDetector.evaluateMotion(0.8f, baseTime + 200L) // Last weightless sample at t=200ms
+
+        // Next sample at t=220ms is ALREADY an impact spike (28.0 m/s² >= 24.0 m/s²)
+        // Gyro rotation registered at t=220ms
+        triggerDetector.updateGyroscope(2.2f, baseTime + 220L)
+        val triggered = triggerDetector.evaluateMotion(28.0f, baseTime + 220L)
+
+        // freeFallEndTimestampMs is set to lastWeightlessTimestampMs (200ms)
+        // impactTimestampMs = 220ms
+        // freeFallToImpactMs = 220 - 200 = 20ms (> 0ms, valid delay in 1..600ms!)
+        assertTrue("Direct transition from weightlessness to impact sample must use last weightless timestamp boundary and trigger AUTO_FALL", triggered)
 
         val state = triggerDetector.countdownState.value
-        assertTrue("State must be ActiveCountdown", state is CountdownState.ActiveCountdown)
-        val active = state as CountdownState.ActiveCountdown
-        assertEquals(TriggerType.AUTO_FALL, active.triggerType)
-        assertEquals(30, active.secondsRemaining)
+        assertTrue(state is CountdownState.ActiveCountdown)
+        assertEquals(TriggerType.AUTO_FALL, (state as CountdownState.ActiveCountdown).triggerType)
+    }
+
+    @Test
+    fun testPreImpactGyroIgnoredAndRejectsFall() {
+        val baseTime = 1700000000000L
+
+        // Pre-impact gyro timestamp from 500ms before free-fall
+        triggerDetector.updateGyroscope(3.0f, baseTime - 500L)
+
+        // Free-fall
+        triggerDetector.evaluateMotion(1.0f, baseTime)
+        triggerDetector.evaluateMotion(1.0f, baseTime + 200L)
+        triggerDetector.evaluateMotion(8.0f, baseTime + 220L)
+
+        // Impact 25.0 m/s² without post-impact gyro
+        val triggered = triggerDetector.evaluateMotion(25.0f, baseTime + 300L)
+
+        assertFalse("Pre-impact gyro spike must be ignored and not confirm post-impact fall", triggered)
+        assertEquals(CountdownState.Idle, triggerDetector.countdownState.value)
+    }
+
+    @Test
+    fun testStaleGyroIgnoredAndRejectsFall() {
+        val baseTime = 1700000000000L
+
+        // Free-fall
+        triggerDetector.evaluateMotion(1.0f, baseTime)
+        triggerDetector.evaluateMotion(1.0f, baseTime + 200L)
+        triggerDetector.evaluateMotion(8.0f, baseTime + 220L)
+
+        // Stale gyro reading from 5 seconds ago
+        triggerDetector.updateGyroscope(3.5f, baseTime - 5000L)
+
+        // Impact 25.0 m/s²
+        val triggered = triggerDetector.evaluateMotion(25.0f, baseTime + 300L)
+
+        assertFalse("Stale gyro reading from 5s ago must be ignored and not confirm post-impact fall", triggered)
+        assertEquals(CountdownState.Idle, triggerDetector.countdownState.value)
+    }
+
+    @Test
+    fun testValidHighImpactConfirmationWithoutGyro() {
+        val baseTime = 1700000000000L
+
+        // Free-fall
+        triggerDetector.evaluateMotion(1.0f, baseTime)
+        triggerDetector.evaluateMotion(1.0f, baseTime + 200L)
+        triggerDetector.evaluateMotion(8.0f, baseTime + 220L)
+
+        // High impact force 34.0 m/s² (>= 32.0 m/s² high kinetic impact shift threshold)
+        val triggered = triggerDetector.evaluateMotion(34.0f, baseTime + 300L)
+
+        assertTrue("High kinetic impact shift >= 32 m/s² confirms fall even if gyro is low", triggered)
+        val state = triggerDetector.countdownState.value
+        assertTrue(state is CountdownState.ActiveCountdown)
+        assertEquals(TriggerType.AUTO_FALL, (state as CountdownState.ActiveCountdown).triggerType)
+    }
+
+    @Test
+    fun testGenuineFallWithSustainedFreeFallAndImpactTriggersAutoFall() {
+        val baseTime = 1700000000000L
+
+        // Stage 1: Free-fall weightlessness (< 1.8 m/s² for >= 200ms)
+        triggerDetector.evaluateMotion(1.2f, baseTime)
+        triggerDetector.evaluateMotion(1.0f, baseTime + 50L)
+        triggerDetector.evaluateMotion(1.1f, baseTime + 100L)
+        triggerDetector.evaluateMotion(0.8f, baseTime + 200L) // Validated free-fall (200ms)
+
+        // Free-fall ends
+        triggerDetector.evaluateMotion(8.0f, baseTime + 220L)
+
+        // Gyro rotation during fall
+        triggerDetector.updateGyroscope(2.2f, baseTime + 250L)
+
+        // Stage 2: Heavy impact spike (28.0 m/s² >= threshold 24.0 m/s²) within 600ms after free-fall
+        val triggered = triggerDetector.evaluateMotion(28.0f, baseTime + 340L)
+
+        assertTrue("Genuine fall with sustained free-fall and impact delay must trigger AUTO_FALL", triggered)
+
+        val state = triggerDetector.countdownState.value
+        assertTrue(state is CountdownState.ActiveCountdown)
+        assertEquals(TriggerType.AUTO_FALL, (state as CountdownState.ActiveCountdown).triggerType)
+        assertEquals(30, (state as CountdownState.ActiveCountdown).secondsRemaining)
     }
 
     @Test
@@ -141,8 +232,11 @@ class TriggerDetectorTest {
         val baseTime = 1700000000000L
 
         // First trigger
-        triggerDetector.updateGyroscope(3.0f, baseTime)
-        val firstTrigger = triggerDetector.evaluateMotion(30.0f, baseTime)
+        triggerDetector.evaluateMotion(1.0f, baseTime)
+        triggerDetector.evaluateMotion(1.0f, baseTime + 200L)
+        triggerDetector.evaluateMotion(8.0f, baseTime + 220L)
+        triggerDetector.updateGyroscope(2.2f, baseTime + 250L)
+        val firstTrigger = triggerDetector.evaluateMotion(28.0f, baseTime + 340L)
         assertTrue("First impact must trigger countdown", firstTrigger)
 
         // Subsequent impact while countdown is active
@@ -154,8 +248,8 @@ class TriggerDetectorTest {
     fun testDetectorStateReset() {
         val baseTime = 1700000000000L
 
-        triggerDetector.updateGyroscope(4.0f, baseTime)
-        triggerDetector.evaluateMotion(35.0f, baseTime)
+        triggerDetector.evaluateMotion(1.0f, baseTime)
+        triggerDetector.evaluateMotion(1.0f, baseTime + 200L)
 
         // Cancel countdown and reset state
         triggerDetector.cancelCountdown()

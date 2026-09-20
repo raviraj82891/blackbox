@@ -6,8 +6,17 @@ import android.content.pm.PackageManager
 import android.os.Build
 
 /**
- * Permission Validator — Handles preflight checks, required vs optional permission validation,
- * and foreground service prerequisite checking across Android 10..14.
+ * Permission Validator — Capability-Based Permission Architecture.
+ *
+ * CORE MOTION FALL & CRASH DETECTION:
+ * Powered by hardware Accelerometer and Gyroscope sensors via SensorManager.
+ * Requires ZERO OS runtime permissions and is ALWAYS available.
+ *
+ * OPTIONAL ENHANCEMENT CAPABILITIES:
+ * - Location (ACCESS_FINE_LOCATION / ACCESS_COARSE_LOCATION): GPS coordinates for emergency dispatch.
+ * - Microphone (RECORD_AUDIO): Audio decibel impact classification.
+ * - Physical Activity (ACTIVITY_RECOGNITION): Motion transition detection.
+ * - Notifications (POST_NOTIFICATIONS): Background status bar notifications.
  */
 object PermissionValidator {
 
@@ -37,20 +46,29 @@ object PermissionValidator {
     }
 
     /**
-     * Preflight check: Returns true ONLY when all REQUIRED monitoring permissions are granted.
+     * Core motion fall and crash protection is powered by hardware sensors and is always available.
      */
-    fun isAllRequiredGranted(context: Context): Boolean {
+    fun isCoreMotionAvailable(context: Context): Boolean = true
+
+    /**
+     * Checks if all optional enhancement permissions are granted.
+     */
+    fun isAllOptionalGranted(context: Context): Boolean {
         return hasLocationPermission(context) && hasMicPermission(context) && hasActivityPermission(context)
     }
 
     /**
-     * Gets missing required permissions for preflight checks and UI warnings.
+     * Gets missing optional permissions for UI diagnostic feedback.
      */
-    fun getMissingRequiredPermissions(context: Context): List<String> {
+    fun getMissingOptionalPermissions(context: Context): List<String> {
         val missing = mutableListOf<String>()
         if (!hasLocationPermission(context)) missing.add("Location")
         if (!hasMicPermission(context)) missing.add("Microphone")
         if (!hasActivityPermission(context)) missing.add("Physical Activity")
         return missing
     }
+
+    fun isAllRequiredGranted(context: Context): Boolean = isCoreMotionAvailable(context)
+
+    fun getMissingRequiredPermissions(context: Context): List<String> = getMissingOptionalPermissions(context)
 }

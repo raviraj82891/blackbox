@@ -27,7 +27,7 @@ class PermissionValidatorTest {
     }
 
     @Test
-    fun testAllRequiredPermissionsGranted() {
+    fun testAllOptionalPermissionsGranted() {
         val granted = setOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.RECORD_AUDIO,
@@ -38,8 +38,9 @@ class PermissionValidatorTest {
         assertTrue(PermissionValidator.hasLocationPermission(context))
         assertTrue(PermissionValidator.hasMicPermission(context))
         assertTrue(PermissionValidator.hasActivityPermission(context))
-        assertTrue(PermissionValidator.isAllRequiredGranted(context))
-        assertTrue(PermissionValidator.getMissingRequiredPermissions(context).isEmpty())
+        assertTrue(PermissionValidator.isCoreMotionAvailable(context))
+        assertTrue(PermissionValidator.isAllOptionalGranted(context))
+        assertTrue(PermissionValidator.getMissingOptionalPermissions(context).isEmpty())
     }
 
     @Test
@@ -52,22 +53,24 @@ class PermissionValidatorTest {
 
         assertFalse(PermissionValidator.hasLocationPermission(context))
         assertTrue(PermissionValidator.hasMicPermission(context))
-        assertFalse(PermissionValidator.isAllRequiredGranted(context))
+        assertTrue(PermissionValidator.isCoreMotionAvailable(context))
+        assertFalse(PermissionValidator.isAllOptionalGranted(context))
 
-        val missing = PermissionValidator.getMissingRequiredPermissions(context)
+        val missing = PermissionValidator.getMissingOptionalPermissions(context)
         assertEquals(1, missing.size)
         assertEquals("Location", missing.first())
     }
 
     @Test
-    fun testAllRequiredPermissionsDeniedPermanently() {
+    fun testAllOptionalPermissionsDeniedCoreMotionStillAvailable() {
         val context = TestPermissionContext(emptySet())
 
         assertFalse(PermissionValidator.hasLocationPermission(context))
         assertFalse(PermissionValidator.hasMicPermission(context))
-        assertFalse(PermissionValidator.isAllRequiredGranted(context))
+        assertTrue("Core motion fall & crash protection is powered by hardware sensors and is always available", PermissionValidator.isCoreMotionAvailable(context))
+        assertFalse(PermissionValidator.isAllOptionalGranted(context))
 
-        val missing = PermissionValidator.getMissingRequiredPermissions(context)
+        val missing = PermissionValidator.getMissingOptionalPermissions(context)
         assertTrue(missing.contains("Location"))
         assertTrue(missing.contains("Microphone"))
     }

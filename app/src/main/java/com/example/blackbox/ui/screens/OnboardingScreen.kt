@@ -8,11 +8,9 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,11 +19,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.example.blackbox.ui.designsystem.*
 import com.example.blackbox.ui.theme.*
 import com.example.blackbox.util.PermissionValidator
@@ -184,26 +185,41 @@ private fun HowItWorksStage(onNext: () -> Unit) {
 @Composable
 private fun StagedPermissionsStage(onComplete: () -> Unit) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val activity = context as? Activity
     var step by remember { mutableIntStateOf(0) }
 
-    var stepStatus by remember { mutableStateOf(PermissionStepStatus.NOT_REQUESTED) }
-
-    fun syncCurrentStepStatus() {
-        val isGranted = when (step) {
+    // Re-verify actual PackageManager permission state per step
+    fun checkStepPermission(currentStep: Int): Boolean {
+        return when (currentStep) {
             0 -> PermissionValidator.hasLocationPermission(context)
             1 -> PermissionValidator.hasMicPermission(context)
             2 -> PermissionValidator.hasActivityPermission(context)
             3 -> PermissionValidator.hasNotificationPermission(context)
             else -> false
         }
-        if (isGranted) {
-            stepStatus = PermissionStepStatus.GRANTED
-        }
     }
 
-    LaunchedEffect(step) {
-        syncCurrentStepStatus()
+    var stepStatus by remember(step) {
+        mutableStateOf(
+            if (checkStepPermission(step)) PermissionStepStatus.GRANTED
+            else PermissionStepStatus.NOT_REQUESTED
+        )
+    }
+
+    // Refresh permission state whenever app resumes (e.g. returning from Android Settings)
+    DisposableEffect(lifecycleOwner, step) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (checkStepPermission(step)) {
+                    stepStatus = PermissionStepStatus.GRANTED
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     val singleLauncher = rememberLauncherForActivityResult(

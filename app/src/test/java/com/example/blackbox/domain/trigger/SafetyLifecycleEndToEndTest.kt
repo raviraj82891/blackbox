@@ -197,29 +197,35 @@ class SafetyLifecycleEndToEndTest {
         repository.recordSensorEvent(EventType.ACCEL, """{"magnitude":9.81}""", System.currentTimeMillis() - 2000L)
         repository.recordSensorEvent(EventType.ACCEL, """{"magnitude":10.12}""", System.currentTimeMillis() - 1000L)
 
-        // 5. Physics Trigger Evaluation: Stage 3 Gyro Rotation + Stage 2 Impact Spike = AUTO_CRASH
+        // 5. Physics Trigger Evaluation: Valid Free-Fall + Impact Spike = AUTO_FALL
         val baseTime = System.currentTimeMillis()
-        triggerDetector.updateGyroscope(3.8f, baseTime)
-        val triggered = triggerDetector.evaluateMotion(34.5f, baseTime)
-        assertTrue("3-Stage physics model must trigger AUTO_CRASH on impact + rotation", triggered)
+        triggerDetector.evaluateMotion(1.0f, baseTime)
+        triggerDetector.evaluateMotion(1.0f, baseTime + 50L)
+        triggerDetector.evaluateMotion(1.0f, baseTime + 100L)
+        triggerDetector.evaluateMotion(1.0f, baseTime + 200L)
+
+        triggerDetector.evaluateMotion(8.0f, baseTime + 220L)
+        triggerDetector.updateGyroscope(2.2f, baseTime + 250L)
+        val triggered = triggerDetector.evaluateMotion(34.5f, baseTime + 280L)
+        assertTrue("3-Stage physics model must trigger AUTO_FALL on sustained free-fall + impact", triggered)
 
         val countdownState = triggerDetector.countdownState.value
         assertTrue(countdownState is CountdownState.ActiveCountdown)
-        assertEquals(TriggerType.AUTO_CRASH, (countdownState as CountdownState.ActiveCountdown).triggerType)
+        assertEquals(TriggerType.AUTO_FALL, (countdownState as CountdownState.ActiveCountdown).triggerType)
 
         // 6. Countdown Expiration -> Incident Creation, Envelope Encryption & RSA Digital Signing
         triggerDetector.updateCountdown(0) // Expire
-        assertEquals(CountdownState.Activated(TriggerType.AUTO_CRASH), triggerDetector.countdownState.value)
+        assertEquals(CountdownState.Activated(TriggerType.AUTO_FALL), triggerDetector.countdownState.value)
 
         val report = repository.freezeBufferAndCreateIncident(
-            triggerType = TriggerType.AUTO_CRASH,
+            triggerType = TriggerType.AUTO_FALL,
             windowMinutes = 60,
             timelineJson = "AUTO_CRASH timeline evidence payload"
         )
 
         // Assert Incident Creation & Cryptographic Hardening
         assertNotNull(report.id)
-        assertEquals(TriggerType.AUTO_CRASH, report.triggerType)
+        assertEquals(TriggerType.AUTO_FALL, report.triggerType)
         assertEquals("ENCRYPTED_AES_256_GCM_BUNDLE", report.encryptedBundle)
         assertEquals("WRAPPED_DEK_KEY_BASE64", report.decryptionKey)
         assertEquals("RSA_DIGITAL_SIGNATURE_BASE64", report.digitalSignature)

@@ -15,7 +15,6 @@ import com.example.blackbox.service.ProtectionState
 import com.example.blackbox.service.ProtectionStateManager
 import com.example.blackbox.ui.navigation.BlackboxNavHost
 import com.example.blackbox.ui.theme.BlackboxTheme
-import com.example.blackbox.util.PermissionValidator
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -27,21 +26,13 @@ class MainActivity : ComponentActivity() {
         // Automatically launch background protection service if onboarding is completed
         val kms = KeyManagementService(this)
         if (kms.isOnboardingCompleted()) {
-            if (PermissionValidator.isAllRequiredGranted(this)) {
-                val serviceIntent = Intent(this, BlackboxForegroundService::class.java)
-                try {
-                    ContextCompat.startForegroundService(this, serviceIntent)
-                } catch (e: Exception) {
-                    ProtectionStateManager.updateState(
-                        ProtectionState.ERROR,
-                        e.localizedMessage ?: "Failed to start protection service"
-                    )
-                }
-            } else {
-                val missing = PermissionValidator.getMissingRequiredPermissions(this).joinToString(", ")
+            val serviceIntent = Intent(this, BlackboxForegroundService::class.java)
+            try {
+                ContextCompat.startForegroundService(this, serviceIntent)
+            } catch (e: Exception) {
                 ProtectionStateManager.updateState(
-                    ProtectionState.PERMISSION_LIMITED,
-                    "Missing required permissions: $missing"
+                    ProtectionState.ERROR,
+                    e.localizedMessage ?: "Failed to start protection service"
                 )
             }
         }

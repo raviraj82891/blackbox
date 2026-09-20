@@ -22,11 +22,22 @@ class AutoDetectionSettingTest {
 
     @Test
     fun testAutomaticDetectionEnabled_TriggersCountdownOnHighImpact() {
-        // Gyro rotation + High impact spike (35 m/s² > 20 m/s² default threshold)
-        triggerDetector.updateGyroscope(3.5f)
-        val triggered = triggerDetector.evaluateMotion(35.0f, System.currentTimeMillis())
+        val baseTime = System.currentTimeMillis()
 
-        assertTrue("Automatic detection should trigger when enabled and impact + gyro exceed thresholds", triggered)
+        // Free-fall weightlessness (< 1.8 m/s² for >= 200ms)
+        triggerDetector.evaluateMotion(1.0f, baseTime)
+        triggerDetector.evaluateMotion(1.0f, baseTime + 50L)
+        triggerDetector.evaluateMotion(1.0f, baseTime + 100L)
+        triggerDetector.evaluateMotion(1.0f, baseTime + 200L)
+
+        // Free-fall ends
+        triggerDetector.evaluateMotion(8.0f, baseTime + 220L)
+        triggerDetector.updateGyroscope(2.5f, baseTime + 250L)
+
+        // Heavy impact spike (35 m/s² at 280ms)
+        val triggered = triggerDetector.evaluateMotion(35.0f, baseTime + 280L)
+
+        assertTrue("Automatic detection should trigger when enabled and impact follows free-fall", triggered)
         assertTrue("Countdown state should be ActiveCountdown", triggerDetector.countdownState.value is CountdownState.ActiveCountdown)
     }
 
@@ -35,9 +46,12 @@ class AutoDetectionSettingTest {
         // Disable automatic detection
         triggerDetector.isAutoDetectionEnabled = false
 
-        // Gyro rotation + High impact spike
-        triggerDetector.updateGyroscope(3.5f)
-        val triggered = triggerDetector.evaluateMotion(35.0f, System.currentTimeMillis())
+        val baseTime = System.currentTimeMillis()
+        triggerDetector.evaluateMotion(1.0f, baseTime)
+        triggerDetector.evaluateMotion(1.0f, baseTime + 200L)
+        triggerDetector.evaluateMotion(8.0f, baseTime + 220L)
+
+        val triggered = triggerDetector.evaluateMotion(35.0f, baseTime + 280L)
 
         assertFalse("Automatic detection should NOT trigger when disabled by user", triggered)
         assertEquals("Countdown state should remain Idle", CountdownState.Idle, triggerDetector.countdownState.value)

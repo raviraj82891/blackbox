@@ -23,6 +23,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Intent
+import androidx.core.content.ContextCompat
+import com.example.blackbox.service.BlackboxForegroundService
+import com.example.blackbox.service.ProtectionState
+import com.example.blackbox.service.ProtectionStateManager
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -165,6 +170,12 @@ fun BlackboxNavHost(
                         onGrantPermissionsAndStart = {
                             kms.setOnboardingCompleted(true)
                             isOnboardingCompleted = true
+                            val serviceIntent = Intent(context, BlackboxForegroundService::class.java)
+                            try {
+                                ContextCompat.startForegroundService(context, serviceIntent)
+                            } catch (e: Exception) {
+                                ProtectionStateManager.updateState(ProtectionState.ERROR, e.localizedMessage ?: "Failed to start service")
+                            }
                             navController.navigate(Screen.Home.route) {
                                 popUpTo(Screen.Onboarding.route) { inclusive = true }
                             }

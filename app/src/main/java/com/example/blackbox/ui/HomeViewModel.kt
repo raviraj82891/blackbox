@@ -2,6 +2,7 @@ package com.example.blackbox.ui
 
 import android.app.Application
 import android.content.Intent
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.blackbox.data.crypto.KeyManagementService
@@ -16,6 +17,8 @@ import com.example.blackbox.service.BlackboxForegroundService
 import com.example.blackbox.service.ProtectionState
 import com.example.blackbox.service.ProtectionStateManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,12 +26,15 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 import javax.inject.Inject
 
+@OptIn(FlowPreview::class)
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     application: Application,
@@ -43,7 +49,7 @@ class HomeViewModel @Inject constructor(
     val protectionState: StateFlow<ProtectionState> = ProtectionStateManager.state
     val protectionError: StateFlow<String?> = ProtectionStateManager.lastError
 
-    // Derived directly from ProtectionStateManager state (no duplicated or optimistic local truth)
+    // Derived directly from ProtectionStateManager state
     val isServiceRunning: StateFlow<Boolean> = protectionState
         .map { it == ProtectionState.ACTIVE || it == ProtectionState.STARTING }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
@@ -66,23 +72,39 @@ class HomeViewModel @Inject constructor(
 
     val countdownState: StateFlow<CountdownState> = triggerDetector.countdownState
 
-    // Live accelerometer points for real-time Sparkline chart
+    // Live accelerometer points for real-time Sparkline chart (sampled at 1Hz max to eliminate 50Hz OOM flameout)
     val sparklinePoints: StateFlow<List<Float>> = repository.getRollingBufferEvents(5)
+        .sample(1000L)
         .map { events ->
             events.filter { it.type == EventType.ACCEL }
-                .takeLast(60)
-                .mapNotNull {
-                    runCatching { JSONObject(it.payloadJson).optDouble("magnitude", 9.81).toFloat() }.getOrNull()
+                .takeLast(30)
+                .mapNotNull { event ->
+                    val json = event.payloadJson
+                    val idx = json.indexOf("\"magnitude\":")
+                    if (idx != -1) {
+                        val start = idx + 12
+                        var end = json.indexOf(",", start)
+                        if (end == -1) end = json.indexOf("}", start)
+                        if (end != -1) json.substring(start, end).toFloatOrNull() else 9.81f
+                    } else 9.81f
                 }
         }
+        .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Situational status derived from activity state
-    val situationalStatus: StateFlow<String> = repository.getRollingBufferEvents(10)
+    // Situational status derived from activity state (sampled at 0.5Hz max)
+    val situationalStatus: StateFlow<String> = repository.getRollingBufferEvents(5)
+        .sample(2000L)
         .map { events ->
             val lastActivity = events.lastOrNull { it.type == EventType.ACTIVITY }
             val state = if (lastActivity != null) {
-                runCatching { JSONObject(lastActivity.payloadJson).optString("state", "STILL") }.getOrDefault("STILL")
+                val json = lastActivity.payloadJson
+                val idx = json.indexOf("\"state\":\"")
+                if (idx != -1) {
+                    val start = idx + 9
+                    val end = json.indexOf("\"", start)
+                    if (end != -1) json.substring(start, end) else "STILL"
+                } else "STILL"
             } else "STILL"
 
             when (state) {
@@ -92,6 +114,7 @@ class HomeViewModel @Inject constructor(
                 else -> "Stationary — Normal Baseline"
             }
         }
+        .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Stationary — Normal Baseline")
 
     // Adaptive threshold suggestion prompt state
@@ -125,21 +148,21 @@ class HomeViewModel @Inject constructor(
             }
         }
 
-        // Verify real cryptographic hash-chain integrity periodically
-        viewModelScope.launch {
-            while (true) {
+        // Verify real cryptographic hash-chain integrity periodically on IO thread
+        viewModelScope.launch(Dispatchers.IO) {
+            while (isActive) {
                 _isChainValid.value = repository.verifyBufferIntegrity(60)
-                delay(15000)
+                delay(60000L)
             }
         }
 
         // Periodically check battery status for Power Saver Mode & Live Battery Level
-        viewModelScope.launch {
-            while (true) {
+        viewModelScope.launch(Dispatchers.IO) {
+            while (isActive) {
                 val battery = batteryCollector.getBatteryStatus()
                 _batteryLevel.value = battery.levelPercentage
                 _isBatterySaverActive.value = battery.levelPercentage < 15 && !battery.isCharging
-                delay(5000)
+                delay(5000L)
             }
         }
     }
@@ -218,14 +241,22 @@ class HomeViewModel @Inject constructor(
         val intent = Intent(getApplication(), BlackboxForegroundService::class.java).apply {
             action = BlackboxForegroundService.ACTION_PAUSE
         }
-        getApplication<Application>().startService(intent)
+        try {
+            ContextCompat.startForegroundService(getApplication(), intent)
+        } catch (e: Exception) {
+            ProtectionStateManager.updateState(ProtectionState.ERROR, e.localizedMessage ?: "Failed to pause protection service")
+        }
     }
 
     fun resumeProtectionService() {
         val intent = Intent(getApplication(), BlackboxForegroundService::class.java).apply {
             action = BlackboxForegroundService.ACTION_RESUME
         }
-        getApplication<Application>().startService(intent)
+        try {
+            ContextCompat.startForegroundService(getApplication(), intent)
+        } catch (e: Exception) {
+            ProtectionStateManager.updateState(ProtectionState.ERROR, e.localizedMessage ?: "Failed to resume protection service")
+        }
     }
 
     fun triggerManualSos() {

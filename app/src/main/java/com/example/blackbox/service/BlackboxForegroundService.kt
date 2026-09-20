@@ -5,11 +5,15 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.hardware.Sensor
+import android.hardware.SensorManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.example.blackbox.MainActivity
@@ -32,6 +36,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -60,6 +66,21 @@ class BlackboxForegroundService : Service() {
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording.asStateFlow()
 
+    // Bounded channels for non-blocking persistence handoff (capacity = 50 batches = 2,500 events ~ 50s telemetry buffer)
+    private val accelChannel = Channel<List<SensorBatchItem>>(capacity = 50, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val gyroChannel = Channel<List<SensorBatchItem>>(capacity = 50, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    private var accelOverflowCount = 0L
+    private var gyroOverflowCount = 0L
+
+    // Debug-only heartbeat counters
+    private var accelSampleCount = 0L
+    private var gyroSampleCount = 0L
+    private var detectorInputCount = 0L
+    private var lastAccelTimestampMs = 0L
+    private var lastGyroTimestampMs = 0L
+    private var lastDetectorInputTimestampMs = 0L
+
     inner class LocalBinder : Binder() {
         fun getService(): BlackboxForegroundService = this@BlackboxForegroundService
     }
@@ -70,15 +91,28 @@ class BlackboxForegroundService : Service() {
         super.onCreate()
         createNotificationChannel()
 
-        // 1. Explicit STARTING state transition
+        Log.d("TRACE_FALL_DEBUG", "protection_requested=true")
         ProtectionStateManager.updateState(ProtectionState.STARTING)
+        Log.d("TRACE_FALL_DEBUG", "protection_state=${ProtectionStateManager.state.value}")
+
         try {
-            // 2. Preflight Permission Check
-            if (!PermissionValidator.isAllRequiredGranted(this)) {
-                val missing = PermissionValidator.getMissingRequiredPermissions(this).joinToString(", ")
+            val sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+            val accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+            val gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+
+            val isAccelAvailable = accelSensor != null
+            val isGyroAvailable = gyroSensor != null
+
+            Log.d("TRACE_FALL_DEBUG", "service_started=true")
+            Log.d("TRACE_FALL_DEBUG", "sensor_collector_started=true")
+            Log.d("TRACE_FALL_DEBUG", "accelerometer_available=$isAccelAvailable")
+            Log.d("TRACE_FALL_DEBUG", "gyroscope_available=$isGyroAvailable")
+
+            if (!isAccelAvailable) {
+                Log.e("TRACE_FALL_DEBUG", "FALL_DETECTION_UNSUPPORTED: Accelerometer hardware sensor not present")
                 ProtectionStateManager.updateState(
-                    ProtectionState.PERMISSION_LIMITED,
-                    "Missing required permissions: $missing"
+                    ProtectionState.ERROR,
+                    "FALL_DETECTION_UNSUPPORTED: Accelerometer hardware sensor not present on device"
                 )
                 return
             }
@@ -86,9 +120,22 @@ class BlackboxForegroundService : Service() {
             startForegroundSafely()
             startSensorCollection()
 
-            // 3. Transition to ACTIVE only after successful service startup & collector initialization
-            ProtectionStateManager.updateState(ProtectionState.ACTIVE)
+            Log.d("TRACE_FALL_DEBUG", "accelerometer_registered=true")
+            Log.d("TRACE_FALL_DEBUG", "gyroscope_registered=$isGyroAvailable")
+            Log.d("TRACE_FALL_DEBUG", "detector_started=true")
+
+            val missingOptional = PermissionValidator.getMissingOptionalPermissions(this)
+            if (missingOptional.isNotEmpty()) {
+                ProtectionStateManager.updateState(
+                    ProtectionState.ACTIVE,
+                    "Core motion protection active. Optional enhancements disabled: ${missingOptional.joinToString(", ")}"
+                )
+            } else {
+                ProtectionStateManager.updateState(ProtectionState.ACTIVE)
+            }
+            Log.d("TRACE_FALL_DEBUG", "protection_state=${ProtectionStateManager.state.value}")
         } catch (e: Exception) {
+            Log.e("TRACE_FALL_DEBUG", "Service startup error: ${e.localizedMessage}")
             ProtectionStateManager.updateState(
                 ProtectionState.ERROR,
                 e.localizedMessage ?: "Failed to start service foreground"
@@ -127,11 +174,17 @@ class BlackboxForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startForegroundSafely()
         when (intent?.action) {
             ACTION_STOP_SERVICE -> stopSelf()
             ACTION_PAUSE -> pauseCollection()
             ACTION_RESUME -> resumeCollection()
             ACTION_MANUAL_SOS -> triggerManualSos()
+            else -> {
+                if (!_isRecording.value) {
+                    resumeCollection()
+                }
+            }
         }
         return START_STICKY
     }
@@ -148,12 +201,42 @@ class BlackboxForegroundService : Service() {
             val wifiCollector = WifiSnapshotCollector(applicationContext)
             val batteryCollector = BatteryCollector(applicationContext)
 
-            val sensorBatch = ArrayList<SensorBatchItem>(50)
+            val accelBatch = ArrayList<SensorBatchItem>(50)
+            val gyroBatch = ArrayList<SensorBatchItem>(50)
 
-            // 1. Accelerometer Flow (50Hz Real-Time Physics + Batched Room DB Disk Writes)
+            // Dedicated Accelerometer Persistence Consumer Coroutine
+            launch(Dispatchers.IO) {
+                for (batch in accelChannel) {
+                    if (!_isRecording.value) continue
+                    try {
+                        repository.recordSensorEventsBatch(batch)
+                    } catch (e: Exception) {
+                        Log.e("TRACE_FALL_DEBUG", "Accel batch DB write error: ${e.localizedMessage}")
+                    }
+                }
+            }
+
+            // Dedicated Gyroscope Persistence Consumer Coroutine
+            launch(Dispatchers.IO) {
+                for (batch in gyroChannel) {
+                    if (!_isRecording.value) continue
+                    try {
+                        repository.recordSensorEventsBatch(batch)
+                    } catch (e: Exception) {
+                        Log.e("TRACE_FALL_DEBUG", "Gyro batch DB write error: ${e.localizedMessage}")
+                    }
+                }
+            }
+
+            // 1. Accelerometer Flow (50Hz Real-Time Physics + Non-Blocking Persistence Handoff)
             launch {
                 sensorCollector.observeAccelerometer().collect { reading ->
                     if (!_isRecording.value) return@collect
+
+                    accelSampleCount++
+                    detectorInputCount++
+                    lastAccelTimestampMs = reading.timestampMs
+                    lastDetectorInputTimestampMs = reading.timestampMs
 
                     // Real-Time 50Hz Physics Trigger Evaluation in Memory (Zero Latency)
                     triggerDetector.evaluateMotion(reading.magnitude, reading.timestampMs)
@@ -163,28 +246,36 @@ class BlackboxForegroundService : Service() {
                     )
 
                     val isSpike = reading.magnitude > 18.0f
-                    synchronized(sensorBatch) {
-                        sensorBatch.add(SensorBatchItem(EventType.ACCEL, payload, reading.timestampMs))
+                    synchronized(accelBatch) {
+                        accelBatch.add(SensorBatchItem(EventType.ACCEL, payload, reading.timestampMs))
                     }
 
-                    // Flush batch every 50 samples (~1s) or immediately on high impact spike
-                    if (isSpike || sensorBatch.size >= 50) {
-                        val toFlush = synchronized(sensorBatch) {
-                            val copy = ArrayList(sensorBatch)
-                            sensorBatch.clear()
+                    // Flush accelBatch every 50 samples (~1s) or immediately on high impact spike
+                    if (isSpike || accelBatch.size >= 50) {
+                        val toFlush = synchronized(accelBatch) {
+                            val copy = ArrayList(accelBatch)
+                            accelBatch.clear()
                             copy
                         }
                         if (toFlush.isNotEmpty()) {
-                            repository.recordSensorEventsBatch(toFlush)
+                            val res = accelChannel.trySend(toFlush)
+                            if (res.isFailure) {
+                                accelOverflowCount++
+                                Log.w("TRACE_FALL_DEBUG", "accel_persistence_queue_overflow count=$accelOverflowCount")
+                            }
                         }
                     }
                 }
             }
 
-            // 2. Gyroscope Flow
+            // 2. Gyroscope Flow (50Hz Real-Time Physics + Non-Blocking Persistence Handoff)
             launch {
                 sensorCollector.observeGyroscope().collect { reading ->
                     if (!_isRecording.value) return@collect
+
+                    gyroSampleCount++
+                    lastGyroTimestampMs = reading.timestampMs
+
                     val payload = """{"x":%.2f,"y":%.2f,"z":%.2f,"deltaMagnitude":%.2f}""".format(
                         reading.x, reading.y, reading.z, reading.deltaMagnitude
                     )
@@ -193,62 +284,70 @@ class BlackboxForegroundService : Service() {
                     triggerDetector.updateGyroscope(reading.deltaMagnitude, reading.timestampMs)
 
                     val isGyroSpike = reading.deltaMagnitude > 2.0f
-                    synchronized(sensorBatch) {
-                        sensorBatch.add(SensorBatchItem(EventType.GYRO, payload, reading.timestampMs))
+                    synchronized(gyroBatch) {
+                        gyroBatch.add(SensorBatchItem(EventType.GYRO, payload, reading.timestampMs))
                     }
 
-                    if (isGyroSpike || sensorBatch.size >= 50) {
-                        val toFlush = synchronized(sensorBatch) {
-                            val copy = ArrayList(sensorBatch)
-                            sensorBatch.clear()
+                    if (isGyroSpike || gyroBatch.size >= 50) {
+                        val toFlush = synchronized(gyroBatch) {
+                            val copy = ArrayList(gyroBatch)
+                            gyroBatch.clear()
                             copy
                         }
                         if (toFlush.isNotEmpty()) {
-                            repository.recordSensorEventsBatch(toFlush)
+                            val res = gyroChannel.trySend(toFlush)
+                            if (res.isFailure) {
+                                gyroOverflowCount++
+                                Log.w("TRACE_FALL_DEBUG", "gyro_persistence_queue_overflow count=$gyroOverflowCount")
+                            }
                         }
                     }
                 }
             }
 
-            // 3. Activity Recognition Transition Flow -> Dynamically drives location sampling
-            launch {
-                activityCollector.startTransitionUpdates().collect { activityReading ->
-                    if (!_isRecording.value) return@collect
-                    val payload = """{"state":"${activityReading.state.name}","confidence":${activityReading.confidence}}"""
-                    repository.recordSensorEvent(EventType.ACTIVITY, payload, activityReading.timestampMs)
+            // 3. Activity Recognition Transition Flow
+            if (PermissionValidator.hasActivityPermission(applicationContext)) {
+                launch {
+                    activityCollector.startTransitionUpdates().collect { activityReading ->
+                        if (!_isRecording.value) return@collect
+                        val payload = """{"state":"${activityReading.state.name}","confidence":${activityReading.confidence}}"""
+                        repository.recordSensorEvent(EventType.ACTIVITY, payload, activityReading.timestampMs)
 
-                    // Derive movement status dynamically: STILL/UNKNOWN -> false, WALKING/RUNNING/IN_VEHICLE -> true
-                    val isMoving = activityReading.state == UserActivityState.WALKING ||
-                            activityReading.state == UserActivityState.RUNNING ||
-                            activityReading.state == UserActivityState.IN_VEHICLE
+                        val isMoving = activityReading.state == UserActivityState.WALKING ||
+                                activityReading.state == UserActivityState.RUNNING ||
+                                activityReading.state == UserActivityState.IN_VEHICLE
 
-                    val bat = batteryCollector.getBatteryStatus()
-                    val isPowerSaver = bat.levelPercentage < 15 && !bat.isCharging
+                        val bat = batteryCollector.getBatteryStatus()
+                        val isPowerSaver = bat.levelPercentage < 15 && !bat.isCharging
 
-                    // Battery Saver forces low power interval regardless of movement
-                    val effectiveIsMoving = if (isPowerSaver) false else isMoving
+                        val effectiveIsMoving = if (isPowerSaver) false else isMoving
 
-                    if (effectiveIsMoving != currentIsMovingState || locationJob == null) {
-                        currentIsMovingState = effectiveIsMoving
-                        restartLocationSampling(locationCollector, effectiveIsMoving)
+                        if (effectiveIsMoving != currentIsMovingState || locationJob == null) {
+                            currentIsMovingState = effectiveIsMoving
+                            restartLocationSampling(locationCollector, effectiveIsMoving)
+                        }
                     }
                 }
             }
 
             // Initial location sampling
-            restartLocationSampling(locationCollector, isMoving = false)
+            if (PermissionValidator.hasLocationPermission(applicationContext)) {
+                restartLocationSampling(locationCollector, isMoving = false)
+            }
 
-            // 4. Audio Classifier Flow (Battery Saver pauses audio classifier)
-            launch {
-                audioCollector.observeAudioEvents().collect { audioEvent ->
-                    if (!_isRecording.value) return@collect
-                    val bat = batteryCollector.getBatteryStatus()
-                    if (bat.levelPercentage < 15 && !bat.isCharging) return@collect // Pause in Power Saver Mode
+            // 4. Audio Classifier Flow
+            if (PermissionValidator.hasMicPermission(applicationContext)) {
+                launch {
+                    audioCollector.observeAudioEvents().collect { audioEvent ->
+                        if (!_isRecording.value) return@collect
+                        val bat = batteryCollector.getBatteryStatus()
+                        if (bat.levelPercentage < 15 && !bat.isCharging) return@collect
 
-                    val payload = """{"eventLabel":"${audioEvent.eventLabel}","decibels":%.1f,"confidence":%.2f}""".format(
-                        audioEvent.decibels, audioEvent.confidence
-                    )
-                    repository.recordSensorEvent(EventType.AUDIO_EVENT, payload, audioEvent.timestampMs)
+                        val payload = """{"eventLabel":"${audioEvent.eventLabel}","decibels":%.1f,"confidence":%.2f}""".format(
+                            audioEvent.decibels, audioEvent.confidence
+                        )
+                        repository.recordSensorEvent(EventType.AUDIO_EVENT, payload, audioEvent.timestampMs)
+                    }
                 }
             }
 
@@ -263,12 +362,29 @@ class BlackboxForegroundService : Service() {
                 repository.recordSensorEvent(EventType.WIFI, wifiPayload, wifi.timestampMs)
             }
 
-            // 6. Periodic Rolling Buffer Purge Maintenance (Runs every 15 minutes)
+            // 6. Periodic Rolling Buffer Purge Maintenance
             launch {
                 while (isActive) {
                     delay(15 * 60 * 1000L)
                     if (_isRecording.value) {
                         repository.purgeExpiredBuffer(60)
+                    }
+                }
+            }
+
+            // 7. TRACE_FALL_DEBUG 2-Second Heartbeat Logging Loop
+            launch {
+                while (isActive) {
+                    delay(2000L)
+                    if (_isRecording.value) {
+                        val now = System.currentTimeMillis()
+                        val accelAge = if (lastAccelTimestampMs > 0) now - lastAccelTimestampMs else -1
+                        val gyroAge = if (lastGyroTimestampMs > 0) now - lastGyroTimestampMs else -1
+                        val detectorAge = if (lastDetectorInputTimestampMs > 0) now - lastDetectorInputTimestampMs else -1
+                        Log.d(
+                            "TRACE_FALL_DEBUG",
+                            "state=${ProtectionStateManager.state.value} accel_samples=$accelSampleCount gyro_samples=$gyroSampleCount detector_inputs=$detectorInputCount last_accel_age_ms=$accelAge last_gyro_age_ms=$gyroAge detector_last_input_age_ms=$detectorAge accel_overflows=$accelOverflowCount gyro_overflows=$gyroOverflowCount detector_state=${triggerDetector.countdownState.value}"
+                        )
                     }
                 }
             }
@@ -280,6 +396,7 @@ class BlackboxForegroundService : Service() {
     }
 
     private fun restartLocationSampling(locationCollector: LocationCollector, isMoving: Boolean) {
+        if (!PermissionValidator.hasLocationPermission(applicationContext)) return
         locationJob?.cancel()
         locationJob = serviceScope.launch {
             locationCollector.observeAdaptiveLocation(isMoving = isMoving).collect { loc ->
@@ -300,28 +417,23 @@ class BlackboxForegroundService : Service() {
         locationJob = null
         triggerDetector.resetState()
         ProtectionStateManager.updateState(ProtectionState.PAUSED)
+        Log.d("TRACE_FALL_DEBUG", "protection_state=${ProtectionStateManager.state.value}")
         updateNotification("TRACE Protection Paused — Sensor Buffer Off")
     }
 
     fun resumeCollection() {
-        // Re-verify permissions on resume
-        if (!PermissionValidator.isAllRequiredGranted(this)) {
-            _isRecording.value = false
-            sensorCollectionJob?.cancel()
-            sensorCollectionJob = null
-            locationJob?.cancel()
-            locationJob = null
-            val missing = PermissionValidator.getMissingRequiredPermissions(this).joinToString(", ")
-            ProtectionStateManager.updateState(
-                ProtectionState.PERMISSION_LIMITED,
-                "Missing required permissions: $missing"
-            )
-            updateNotification("TRACE Protection Limited — Permissions Missing")
-            return
-        }
-
         startSensorCollection()
-        ProtectionStateManager.updateState(ProtectionState.ACTIVE)
+
+        val missingOptional = PermissionValidator.getMissingOptionalPermissions(this)
+        if (missingOptional.isNotEmpty()) {
+            ProtectionStateManager.updateState(
+                ProtectionState.ACTIVE,
+                "Core motion protection active. Optional enhancements disabled: ${missingOptional.joinToString(", ")}"
+            )
+        } else {
+            ProtectionStateManager.updateState(ProtectionState.ACTIVE)
+        }
+        Log.d("TRACE_FALL_DEBUG", "protection_state=${ProtectionStateManager.state.value}")
         updateNotification("TRACE Protection Active — Recording Your Last Hour")
     }
 
@@ -375,6 +487,7 @@ class BlackboxForegroundService : Service() {
         locationJob = null
         triggerDetector.resetState()
         ProtectionStateManager.updateState(ProtectionState.STOPPED)
+        Log.d("TRACE_FALL_DEBUG", "protection_state=${ProtectionStateManager.state.value}")
         serviceJob.cancel()
     }
 
